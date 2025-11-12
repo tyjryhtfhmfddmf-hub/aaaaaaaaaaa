@@ -1,0 +1,53 @@
+{
+  "name": "music-sync-desktop",
+  "version": "1.0.0",
+  "description": "Desktop application and WebSocket server for Music Sync",
+  "main": "electron/main.js",
+  "homepage": "./",
+  "scripts": {
+    "start:server": "node server.js",
+    "start": "vite",
+    "build": "vite build",
+    "electron:dev": "concurrently \"npm:start\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:package": "npm run build && electron-builder"
+  },
+  "keywords": [
+    "websocket",
+    "music",
+    "sync",
+    "electron"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.9.1",
+    "vite": "^5.1.4",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.musicsync.app",
+    "productName": "Music Sync",
+    "files": [
+      "dist/**/*",
+      "electron/main.js",
+      "electron/preload.js"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    }
+  }
+}

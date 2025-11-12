@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss://music-sync-relay-1.onrender.com; media-src 'self' blob:;">
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Music Sync</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fast-average-color@9.4.0/dist/index.min.js"></script>
+    <style>
+      :root {
+        --custom-color-primary: #4f46e5;
+        --custom-color-primary-hover: #6366f1;
+        --custom-color-accent: #818cf8;
+        --custom-color-text: #c7d2fe;
+        --custom-color-primary-t-50: rgba(79, 70, 229, 0.5);
+      }
+      
+      /* Miku Theme */
+      .theme-miku {
+        --color-primary: #00add8;
+        --color-primary-hover: #10c7f5;
+        --color-accent: #88f0e8;
+        --color-accent-text: #e0feff;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cdefs%3E%3Cstyle%3E.text %7B font-family: 'monospace'; font-size: 14px; fill: rgba(136, 240, 232, 0.04); %7D%3C/style%3E%3C/defs%3E%3Ctext x='10' y='20' class='text'%3E0101010101010101%3C/text%3E%3Ctext x='5' y='45' class='text'%3E10101010101010101%3C/text%3E%3Ctext x='15' y='70' class='text'%3E0101010101010101%3C/text%3E%3Ctext x='0' y='95' class='text'%3E101010101010101010%3C/text%3E%3Ctext x='20' y='120' class='text'%3E0101010101010%3C/text%3E%3Ctext x='25' y='145' class='text'%3E10101010101010%3C/text%3E%3Ctext x='10' y='170' class='text'%3E010101010101010%3C/text%3E%3Ctext x='30' y='195' class='text'%3E101010101010%3C/text%3E%3C/svg%3E");
+      }
+      .theme-miku .bg-indigo-600 { background-color: var(--color-primary); }
+      .theme-miku .hover\:bg-indigo-500:hover { background-color: var(--color-primary-hover); }
+      .theme-miku .text-indigo-400 { color: var(--color-accent); }
+      .theme-miku .text-indigo-300 { color: var(--color-accent-text); }
+      .theme-miku .border-indigo-400 { border-color: var(--color-accent); }
+      .theme-miku .accent-indigo-500 { accent-color: var(--color-primary); }
+      .theme-miku .focus\:ring-indigo-500:focus { --tw-ring-color: var(--color-primary); }
+      .theme-miku .bg-indigo-600\/50 { background-color: rgba(0, 173, 216, 0.5); }
+      .theme-miku .hover\:bg-indigo-600\/50:hover { background-color: rgba(0, 173, 216, 0.6); }
+
+      /* Custom Theme */
+      .theme-custom .bg-indigo-600 { background-color: var(--custom-color-primary); }
+      .theme-custom .hover\:bg-indigo-500:hover { background-color: var(--custom-color-primary-hover); }
+      .theme-custom .text-indigo-400 { color: var(--custom-color-accent); }
+      .theme-custom .text-indigo-300 { color: var(--custom-color-text); }
+      .theme-custom .border-indigo-400 { border-color: var(--custom-color-accent); }
+      .theme-custom .accent-indigo-500 { accent-color: var(--custom-color-primary); }
+      .theme-custom .focus\:ring-indigo-500:focus { --tw-ring-color: var(--custom-color-primary); }
+      .theme-custom .bg-indigo-600\/50 { background-color: var(--custom-color-primary-t-50); }
+      .theme-custom .hover\:bg-gray-600\/50:hover { background-color: var(--custom-color-primary-t-50); opacity: 0.8; }
+
+
+      /* For custom scrollbars to match the dark theme */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1f2937; /* bg-gray-800 */
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #4b5563; /* bg-gray-600 */
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #6b7280; /* bg-gray-500 */
+      }
+
+      /* Dynamic Player Theme Styles */
+      #player-footer {
+        transition: background-color 0.7s ease-in-out;
+      }
+      .player-text {
+        color: var(--player-text-color, #FFF);
+        transition: color 0.7s ease-in-out;
+      }
+      .player-text-secondary {
+        color: var(--player-text-secondary-color, #D1D5DB); /* text-gray-300 */
+        transition: color 0.7s ease-in-out;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "react/jsx-dev-runtime": "https://esm.sh/react@19.0.0/jsx-dev-runtime",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "vite": "https://aistudiocdn.com/vite@^7.2.2",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-gray-900 text-white antialiased">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

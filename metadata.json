@@ -1,0 +1,5 @@
+{
+  "name": "Music Sync Web UI",
+  "description": "A web-based user interface for a music player with library management, playlist creation, and simulated network synchronization features, inspired by a Python desktop application.",
+  "requestFramePermissions": []
+}
