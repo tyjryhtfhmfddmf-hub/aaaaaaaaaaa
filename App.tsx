@@ -729,6 +729,55 @@ const App: React.FC = () => {
         }
     }, [queue]);
 
+    const handleSharePlaylist = useCallback(() => {
+        if (websocketRef.current?.readyState === WebSocket.OPEN) {
+            if (playlists.length > 0) {
+                const playlistToShare = playlists[0]; // Sharing the first playlist for now
+                websocketRef.current.send(JSON.stringify({
+                    type: 'sharePlaylist',
+                    payload: { playlist: playlistToShare }
+                }));
+                alert(`Shared playlist: "${playlistToShare.name}"`);
+            } else {
+                alert('You have no playlists to share.');
+            }
+        } else {
+            alert('Not connected to a session.');
+        }
+    }, [playlists]);
+
+    const handleCompareLibraries = useCallback(() => {
+        if (websocketRef.current?.readyState === WebSocket.OPEN) {
+            const serializableLibrary = library
+                .filter(song => !song.isRemote)
+                .map(song => {
+                    const { file, ...rest } = song;
+                    return rest;
+                });
+            
+            if (serializableLibrary.length > 0) {
+                websocketRef.current.send(JSON.stringify({
+                    type: 'compareLibraries',
+                    payload: { library: serializableLibrary }
+                }));
+                alert('Your library has been sent for comparison.');
+            } else {
+                alert('Your library is empty.');
+            }
+        } else {
+            alert('Not connected to a session.');
+        }
+    }, [library]);
+
+    const handleSyncCommon = useCallback(() => {
+        if (websocketRef.current?.readyState === WebSocket.OPEN) {
+            websocketRef.current.send(JSON.stringify({ type: 'syncCommon' }));
+            alert('Request to sync common songs has been sent.');
+        } else {
+            alert('Not connected to a session.');
+        }
+    }, []);
+
     useEffect(() => {
         return () => {
             websocketRef.current?.close();
@@ -790,9 +839,12 @@ const App: React.FC = () => {
                         onJoin={handleJoin}
                         onLeave={handleLeave}
                         onShareQueue={handleShareQueue}
+                        onSharePlaylist={handleSharePlaylist}
+                        onCompareLibraries={handleCompareLibraries}
+                        onSyncCommon={handleSyncCommon}
                     />
                 </div>
-                <div className="w-full md:w-2/3 flex flex-col bg-gray-800/50">
+                <div className="w-full md:w-2-3 flex flex-col bg-gray-800/50">
                     <QueuePanel 
                         queue={queue}
                         currentSongId={currentSong?.id}

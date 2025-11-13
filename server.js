@@ -110,6 +110,15 @@ wss.on('connection', (ws) => {
                     });
                     console.log(`Library changes broadcasted in room: ${clientRoomCode}`);
                 }
+            } else if (type === 'sharePlaylist') {
+                console.log(`Received sharePlaylist in room ${clientRoomCode}:`, data.payload);
+                // Placeholder for future implementation
+            } else if (type === 'compareLibraries') {
+                console.log(`Received compareLibraries in room ${clientRoomCode}:`, data.payload);
+                // Placeholder for future implementation
+            } else if (type === 'syncCommon') {
+                console.log(`Received syncCommon in room ${clientRoomCode}`);
+                // Placeholder for future implementation
             } else if (type === 'leave') {
                 // Client explicitly leaves
                 cleanupClient();

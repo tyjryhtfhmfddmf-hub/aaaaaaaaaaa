@@ -9,6 +9,9 @@ interface NetworkPanelProps {
     onJoin: (code: string) => void;
     onLeave: () => void;
     onShareQueue: () => void;
+    onSharePlaylist: () => void;
+    onCompareLibraries: () => void;
+    onSyncCommon: () => void;
 }
 
 export const NetworkPanel: React.FC<NetworkPanelProps> = ({
@@ -19,6 +22,9 @@ export const NetworkPanel: React.FC<NetworkPanelProps> = ({
     onJoin,
     onLeave,
     onShareQueue,
+    onSharePlaylist,
+    onCompareLibraries,
+    onSyncCommon,
 }) => {
     const [joinCode, setJoinCode] = useState('');
 
@@ -51,9 +57,9 @@ export const NetworkPanel: React.FC<NetworkPanelProps> = ({
                         </div>
                          <div className="grid grid-cols-2 gap-2 pt-2">
                             <button onClick={onShareQueue} className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded">Share Queue</button>
-                            <button className="bg-gray-700 hover:bg-gray-600 text-sm py-2 px-3 rounded cursor-not-allowed" disabled title="Not implemented">Share Playlist</button>
-                            <button className="bg-gray-700 hover:bg-gray-600 text-sm py-2 px-3 rounded cursor-not-allowed" disabled title="Not implemented">Compare Libraries</button>
-                            <button className="bg-gray-700 hover:bg-gray-600 text-sm py-2 px-3 rounded cursor-not-allowed" disabled title="Not implemented">Sync Common</button>
+                            <button onClick={onSharePlaylist} className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded">Share Playlist</button>
+                            <button onClick={onCompareLibraries} className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded">Compare Libraries</button>
+                            <button onClick={onSyncCommon} className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded">Sync Common</button>
                         </div>
                     </div>
                 );
