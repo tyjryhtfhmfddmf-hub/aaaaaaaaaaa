@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   base: './',
   plugins: [react()],
+  esbuild: {
+    jsxInject: `import React from 'react'`
+  },
   server: {
     port: 5173,
     strictPort: true,

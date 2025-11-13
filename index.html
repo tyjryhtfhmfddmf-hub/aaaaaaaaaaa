@@ -2,13 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss://music-sync-relay-1.onrender.com; media-src 'self' blob:;">
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    
+    <link rel="icon" type="image/svg+xml" href="./vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Music Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/fast-average-color@9.4.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fast-average-color@9.4.0/dist/index.esm.min.js"></script>
     <style>
       :root {
         --custom-color-primary: #4f46e5;
@@ -90,10 +90,10 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
+<link rel="stylesheet" href="./index.css">
 </head>
   <body class="bg-gray-900 text-white antialiased">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="./index.tsx"></script>
   </body>
 </html>
