@@ -718,6 +718,7 @@ const App: React.FC = () => {
     const handleShareQueue = useCallback(() => {
         if (websocketRef.current?.readyState === WebSocket.OPEN) {
             const queueIds = queue.map(s => s.id);
+            console.log('Sharing queue with IDs:', queueIds);
             websocketRef.current.send(JSON.stringify({
                 type: 'shareQueue',
                 payload: { queue: queueIds }

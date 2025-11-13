@@ -46,86 +46,77 @@ wss.on('connection', (ws) => {
             const data = JSON.parse(message);
             console.log('Received:', data);
 
-            switch (data.type) {
-                case 'host':
-                    // A client wants to host a new room.
+            const type = data.type ? data.type.trim() : '';
+
+            if (type === 'host') {
+                // A client wants to host a new room.
+                cleanupClient(); // Clean up any previous room connection
+                const newRoomCode = generateRoomCode();
+                rooms.set(newRoomCode, new Set([ws]));
+                clientRoomCode = newRoomCode;
+                ws.send(JSON.stringify({
+                    type: 'hosted',
+                    payload: { roomCode: newRoomCode }
+                }));
+                console.log(`Client hosted new room: ${newRoomCode}`);
+            } else if (type === 'join') {
+                // A client wants to join an existing room.
+                const { roomCode } = data.payload;
+                if (rooms.has(roomCode)) {
                     cleanupClient(); // Clean up any previous room connection
-                    const newRoomCode = generateRoomCode();
-                    rooms.set(newRoomCode, new Set([ws]));
-                    clientRoomCode = newRoomCode;
+                    rooms.get(roomCode).add(ws);
+                    clientRoomCode = roomCode;
                     ws.send(JSON.stringify({
-                        type: 'hosted',
-                        payload: { roomCode: newRoomCode }
+                        type: 'joined',
+                        payload: { roomCode: roomCode }
                     }));
-                    console.log(`Client hosted new room: ${newRoomCode}`);
-                    break;
-
-                case 'join':
-                    // A client wants to join an existing room.
-                    const { roomCode } = data.payload;
-                    if (rooms.has(roomCode)) {
-                        cleanupClient(); // Clean up any previous room connection
-                        rooms.get(roomCode).add(ws);
-                        clientRoomCode = roomCode;
-                        ws.send(JSON.stringify({
-                            type: 'joined',
-                            payload: { roomCode: roomCode }
-                        }));
-                        console.log(`Client joined room: ${roomCode}`);
-                    } else {
-                        ws.send(JSON.stringify({
-                            type: 'error',
-                            payload: { message: `Room with code "${roomCode}" not found.` }
-                        }));
-                        console.log(`Join failed. Room not found: ${roomCode}`);
-                    }
-                    break;
-
-                case 'shareQueue':
-                    // A client is sharing their queue with the room.
-                    if (clientRoomCode && rooms.has(clientRoomCode)) {
-                        const room = rooms.get(clientRoomCode);
-                        const messageToSend = JSON.stringify({
-                            type: 'queueUpdate',
-                            payload: { queue: data.payload.queue }
-                        });
-                        // Broadcast to everyone else in the room
-                        room.forEach(client => {
-                            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                                client.send(messageToSend);
-                            }
-                        });
-                        console.log(`Queue shared in room: ${clientRoomCode}`);
-                    }
-                    break;
-                
-                case 'shareLibrary':
-                    // A client is sharing their library metadata.
-                    if (clientRoomCode && rooms.has(clientRoomCode)) {
-                        const room = rooms.get(clientRoomCode);
-                        const messageToSend = JSON.stringify({
-                            type: 'libraryUpdate',
-                            payload: { library: data.payload.library }
-                        });
-                        // Broadcast to everyone else in the room
-                        room.forEach(client => {
-                            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                                client.send(messageToSend);
-                            }
-                        });
-                        console.log(`Library changes broadcasted in room: ${clientRoomCode}`);
-                    }
-                    break;
-
-                case 'leave':
-                    // Client explicitly leaves
-                    cleanupClient();
-                    clientRoomCode = null;
-                    ws.send(JSON.stringify({ type: 'left' }));
-                    break;
-
-                default:
-                    console.warn('Unknown message type:', data.type);
+                    console.log(`Client joined room: ${roomCode}`);
+                } else {
+                    ws.send(JSON.stringify({
+                        type: 'error',
+                        payload: { message: `Room with code "${roomCode}" not found.` }
+                    }));
+                    console.log(`Join failed. Room not found: ${roomCode}`);
+                }
+            } else if (type === 'shareQueue') {
+                // A client is sharing their queue with the room.
+                if (clientRoomCode && rooms.has(clientRoomCode)) {
+                    const room = rooms.get(clientRoomCode);
+                    const messageToSend = JSON.stringify({
+                        type: 'queueUpdate',
+                        payload: { queue: data.payload.queue }
+                    });
+                    // Broadcast to everyone else in the room
+                    room.forEach(client => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(messageToSend);
+                        }
+                    });
+                    console.log(`Queue shared in room: ${clientRoomCode}`);
+                }
+            } else if (type === 'shareLibrary') {
+                // A client is sharing their library metadata.
+                if (clientRoomCode && rooms.has(clientRoomCode)) {
+                    const room = rooms.get(clientRoomCode);
+                    const messageToSend = JSON.stringify({
+                        type: 'libraryUpdate',
+                        payload: { library: data.payload.library }
+                    });
+                    // Broadcast to everyone else in the room
+                    room.forEach(client => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(messageToSend);
+                        }
+                    });
+                    console.log(`Library changes broadcasted in room: ${clientRoomCode}`);
+                }
+            } else if (type === 'leave') {
+                // Client explicitly leaves
+                cleanupClient();
+                clientRoomCode = null;
+                ws.send(JSON.stringify({ type: 'left' }));
+            } else {
+                console.warn('Unknown message type:', data.type);
             }
         } catch (error) {
             console.error('Failed to parse message or handle client request:', error);
