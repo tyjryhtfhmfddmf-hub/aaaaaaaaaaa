@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { Song } from '../types';
-import { AddIcon, FolderAddIcon, ChevronDownIcon, EditIcon, CheckIcon, RemoveIcon, TrashIcon } from './Icons';
+import { AddIcon, FolderAddIcon, ChevronDownIcon, EditIcon, CheckIcon, RemoveIcon, TrashIcon, DownloadIcon } from './Icons';
 
 interface LibraryPanelProps {
     library: Song[];
@@ -8,9 +8,10 @@ interface LibraryPanelProps {
     addToQueue: (song: Song) => void;
     onUpdateSong: (songId: string, newMetadata: { title: string; artist: string; album: string }) => void;
     onRemoveSong: (songId: string) => void;
+    onDownloadSong: (songId: string) => void;
 }
 
-export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdded, addToQueue, onUpdateSong, onRemoveSong }) => {
+export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdded, addToQueue, onUpdateSong, onRemoveSong, onDownloadSong }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
     const [editingSongId, setEditingSongId] = useState<string | null>(null);
@@ -262,7 +263,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                         e.dataTransfer.setData('song-id', song.id);
                                         e.dataTransfer.effectAllowed = 'copy';
                                     } : undefined}
-                                    className={`group flex items-center p-2 rounded-md transition-colors ${song.isRemote ? 'opacity-60' : 'hover:bg-gray-700 cursor-pointer'}`}
+                                    className={`group flex items-center p-2 rounded-md transition-colors ${song.isRemote ? 'opacity-60 cursor-not-allowed' : 'hover:bg-gray-700 cursor-pointer'}`}
                                 >
                                     {song.albumArt ? (
                                         <img src={song.albumArt} alt={song.album} className="w-10 h-10 rounded-md mr-3 object-cover flex-shrink-0" />
@@ -280,26 +281,42 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                             {Math.floor(song.duration / 60)}:{(Math.floor(song.duration % 60)).toString().padStart(2, '0')}
                                         </span>
                                         <div className="hidden group-hover:flex items-center">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleEditClick(song);
-                                                }}
-                                                title="Edit metadata"
-                                                className="p-2 rounded-full text-gray-400 hover:bg-indigo-600/50 hover:text-white"
-                                            >
-                                                <EditIcon />
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    addToQueue(song);
-                                                }}
-                                                title="Add to queue"
-                                                className="p-2 rounded-full text-gray-400 hover:bg-indigo-600/50 hover:text-white"
-                                            >
-                                                <AddIcon />
-                                            </button>
+                                            {song.isRemote && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onDownloadSong(song.id);
+                                                    }}
+                                                    title="Download song"
+                                                    className="p-2 rounded-full text-gray-400 hover:bg-green-600/50 hover:text-white"
+                                                >
+                                                    <DownloadIcon />
+                                                </button>
+                                            )}
+                                            {!song.isRemote && (
+                                                <>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleEditClick(song);
+                                                        }}
+                                                        title="Edit metadata"
+                                                        className="p-2 rounded-full text-gray-400 hover:bg-indigo-600/50 hover:text-white"
+                                                    >
+                                                        <EditIcon />
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            addToQueue(song);
+                                                        }}
+                                                        title="Add to queue"
+                                                        className="p-2 rounded-full text-gray-400 hover:bg-indigo-600/50 hover:text-white"
+                                                    >
+                                                        <AddIcon />
+                                                    </button>
+                                                </>
+                                            )}
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();

@@ -488,7 +488,7 @@ const App: React.FC = () => {
 
     const addToQueue = (song: Song) => {
         if (song.isRemote && !song.file) {
-            console.warn("Attempted to add a remote song without a file to the queue.");
+            alert("Cannot add a remote song to the queue until it has been downloaded.");
             return;
         }
         if (!queue.some(s => s.id === song.id)) {
@@ -590,6 +590,21 @@ const App: React.FC = () => {
         setPlaylists(newPlaylists);
         localStorage.setItem('music_playlists', JSON.stringify(newPlaylists));
     };
+
+    const handleDownloadSong = useCallback((songId: string) => {
+        const songToDownload = library.find(s => s.id === songId);
+        if (songToDownload && songToDownload.isRemote) {
+            if (websocketRef.current?.readyState === WebSocket.OPEN) {
+                websocketRef.current.send(JSON.stringify({
+                    type: 'requestSongFile',
+                    payload: { songKey: getSongKey(songToDownload) }
+                }));
+                alert(`Requesting "${songToDownload.title}"...`);
+            } else {
+                alert('Not connected to a session. Cannot download songs.');
+            }
+        }
+    }, [library]);
 
     const clearQueue = useCallback(() => {
         setQueue([]);
@@ -946,6 +961,7 @@ const App: React.FC = () => {
                         onOpenSettings={() => setIsSettingsModalOpen(true)}
                         onUpdateSong={handleUpdateSongMetadata}
                         onRemoveSong={handleRemoveSongFromLibrary}
+                        onDownloadSong={handleDownloadSong}
                     />
                     <NetworkPanel
                         status={networkStatus}
