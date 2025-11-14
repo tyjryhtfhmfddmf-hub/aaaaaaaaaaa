@@ -765,19 +765,48 @@ const App: React.FC = () => {
                             if (newChunks[chunkSongKey].received === newChunks[chunkSongKey].total) {
                                 const receivedSong = library.find(s => getSongKey(s) === chunkSongKey);
                                 if (receivedSong) {
-                                    const fileBlob = new Blob(newChunks[chunkSongKey].chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' }); // Adjust type if needed
-                                    const newFile = new File([fileBlob], receivedSong.title, { type: fileBlob.type });
-                                    const updatedSong = { ...receivedSong, file: newFile, isRemote: false };
+                                    const fileBlob = new Blob(newChunks[chunkSongKey].chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' });
+                                    const newFile = new File([fileBlob], `${receivedSong.title}.mp3`, { type: fileBlob.type });
                                     
-                                    updateSongInDB(receivedSong.id, { file: newFile, isRemote: false });
+                                    const reader = new FileReader();
+                                    reader.onload = async (event) => {
+                                        const arrayBuffer = event.target.result;
+                                        const jsmediatags = (window as any).jsmediatags;
+
+                                        let albumArt = receivedSong.albumArt;
+                                        try {
+                                            const tags = await new Promise((resolve, reject) => {
+                                                jsmediatags.read(newFile, { onSuccess: resolve, onError: reject });
+                                            });
+                                            const { picture } = tags.tags;
+                                            if (picture) {
+                                                const artBlob = new Blob([new Uint8Array(picture.data)], { type: picture.format });
+                                                albumArt = await blobToDataURL(artBlob);
+                                            }
+                                        } catch (error) {
+                                            console.error("Error reading tags from downloaded file, preserving old album art.", error);
+                                        }
+
+                                        const updatedSong = {
+                                            ...receivedSong,
+                                            file: newFile,
+                                            isRemote: false,
+                                            albumArt: albumArt
+                                        };
+
+                                        // Update the song in IndexedDB
+                                        updateSongInDB(receivedSong.id, { file: newFile, isRemote: false, albumArt: albumArt ? new Blob([await fetch(albumArt).then(r => r.arrayBuffer())]) : undefined });
+
+                                        // Update state
+                                        setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
+                                        setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
+
+                                        alert(`${receivedSong.title} has been downloaded!`);
+                                    };
+                                    reader.readAsArrayBuffer(fileBlob);
                                     
-                                    setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
-                                    
-                                    // Also update in queue
-                                    setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
-                                    
+                                    // Clean up
                                     delete newChunks[chunkSongKey];
-                                    alert(`${receivedSong.title} has been downloaded!`);
                                 }
                             }
                             return newChunks;

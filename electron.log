@@ -6,11 +6,3 @@
 [start] > music-sync-desktop@1.0.0 start
 [start] > vite
 [start]
-[start] [33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
-[start]
-[start]   VITE v5.4.21  ready in 321 ms
-[start]
-[start]   ➜  Local:   http://localhost:5173/
-[start]   ➜  Network: use --host to expose
-[1] [2359:1114/150756.373867:ERROR:ozone_platform_x11.cc(244)] Missing X server or $DISPLAY
-[1] [2359:1114/150756.373926:ERROR:env.cc(257)] The platform failed to initialize.  Exiting.
