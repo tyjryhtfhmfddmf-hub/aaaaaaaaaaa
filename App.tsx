@@ -1,7 +1,7 @@
 
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import type { Song, Playlist, CustomPalette } from './types';
+
 import { PlayerControls } from './components/PlayerControls';
 import { NetworkPanel } from './components/NetworkPanel';
 import { QueuePanel } from './components/QueuePanel';
@@ -9,6 +9,9 @@ import { LibraryTabs } from './components/LibraryTabs';
 import { SavePlaylistModal } from './components/SavePlaylistModal';
 import { SettingsModal } from './components/SettingsModal';
 import { StatusBar } from './components/StatusBar';
+import { ComparisonModal } from './components/ComparisonModal';
+import { compareLibraries } from './lib/utils';
+import type { Song, Playlist, CustomPalette, ComparisonData } from './types';
 
 // --- IndexedDB Helpers ---
 const DB_NAME = 'MusicSyncDB';
@@ -120,6 +123,8 @@ const App: React.FC = () => {
     const [rememberQueue, setRememberQueue] = useState<boolean>(true);
     const [theme, setTheme] = useState<string>('default');
     const [customPalettes, setCustomPalettes] = useState<CustomPalette[]>([]);
+    const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
+    const [comparisonData, setComparisonData] = useState<ComparisonData | null>(null);
     const [activeCustomColors, setActiveCustomColors] = useState({
         primary: '#4f46e5',
         accent: '#818cf8',
@@ -639,10 +644,11 @@ const App: React.FC = () => {
                         alert(`Queue has been updated by a user in room ${roomCode}.`);
                         break;
                     case 'libraryUpdate':
-                        const remoteLibrary = message.payload.library as Omit<Song, 'file'>[];
+                        const remoteLibraryUpdate = message.payload.library as Omit<Song, 'file'>[];
+                        handleCompareLibraries(remoteLibraryUpdate.map(song => ({ ...song, isRemote: true })));
                         setLibrary(prevLibrary => {
                             const currentLibraryIds = new Set(prevLibrary.map(s => s.id));
-                            const newSongs = remoteLibrary
+                            const newSongs = remoteLibraryUpdate
                                 .filter(remoteSong => !currentLibraryIds.has(remoteSong.id))
                                 .map(remoteSong => ({
                                     ...remoteSong,
@@ -655,6 +661,11 @@ const App: React.FC = () => {
                             }
                             return prevLibrary;
                         });
+                        break;
+                    case 'playlistUpdate':
+                        const { playlist } = message.payload;
+                        alert(`Playlist "${playlist.name}" has been shared by a user in room ${roomCode}.`);
+                        // Further implementation would involve adding this playlist to the client's playlists state
                         break;
                     case 'left':
                         ws.close();
@@ -729,44 +740,29 @@ const App: React.FC = () => {
         }
     }, [queue]);
 
-    const handleSharePlaylist = useCallback(() => {
+    const handleSharePlaylist = useCallback((playlistId: string) => {
         if (websocketRef.current?.readyState === WebSocket.OPEN) {
-            if (playlists.length > 0) {
-                const playlistToShare = playlists[0]; // Sharing the first playlist for now
+            const playlistToShare = playlists.find(p => p.id === playlistId);
+            if (playlistToShare) {
                 websocketRef.current.send(JSON.stringify({
                     type: 'sharePlaylist',
                     payload: { playlist: playlistToShare }
                 }));
                 alert(`Shared playlist: "${playlistToShare.name}"`);
             } else {
-                alert('You have no playlists to share.');
+                alert('Playlist not found.');
             }
         } else {
             alert('Not connected to a session.');
         }
     }, [playlists]);
 
-    const handleCompareLibraries = useCallback(() => {
-        if (websocketRef.current?.readyState === WebSocket.OPEN) {
-            const serializableLibrary = library
-                .filter(song => !song.isRemote)
-                .map(song => {
-                    const { file, ...rest } = song;
-                    return rest;
-                });
-            
-            if (serializableLibrary.length > 0) {
-                websocketRef.current.send(JSON.stringify({
-                    type: 'compareLibraries',
-                    payload: { library: serializableLibrary }
-                }));
-                alert('Your library has been sent for comparison.');
-            } else {
-                alert('Your library is empty.');
-            }
-        } else {
-            alert('Not connected to a session.');
-        }
+    const handleCompareLibraries = useCallback((remoteLibrary: Song[]) => {
+        const localUser = 'You';
+        const remoteUser = 'Them'; // Replace with actual remote user name if available
+        const comparisonResult = compareLibraries(localUser, remoteUser, library.filter(s => !s.isRemote), remoteLibrary);
+        setComparisonData(comparisonResult);
+        setIsComparisonModalOpen(true);
     }, [library]);
 
     const handleSyncCommon = useCallback(() => {
@@ -817,9 +813,9 @@ const App: React.FC = () => {
     }, [currentSong]);
 
     return (
-        <div className="h-screen w-screen flex flex-col bg-gray-900 text-gray-200 font-sans overflow-hidden">
-            <main className="relative flex-1 flex flex-col md:flex-row overflow-hidden">
-                <div className="w-full md:w-1/3 flex flex-col border-r border-gray-800 bg-gray-900 overflow-hidden">
+        <div className="h-screen w-screen flex flex-col bg-gray-900 text-gray-200 font-sans overflow-hidden" style={{ minHeight: '480px' }}>
+            <main className="relative flex-1 flex flex-col lg:flex-row overflow-hidden">
+                <div className="w-full lg:w-1/3 flex flex-col border-r border-gray-800 bg-gray-900 overflow-hidden min-w-0">
                     <LibraryTabs 
                         library={library}
                         onSongsAdded={handleSongsAdded}
@@ -840,11 +836,11 @@ const App: React.FC = () => {
                         onLeave={handleLeave}
                         onShareQueue={handleShareQueue}
                         onSharePlaylist={handleSharePlaylist}
-                        onCompareLibraries={handleCompareLibraries}
                         onSyncCommon={handleSyncCommon}
+                        playlists={playlists}
                     />
                 </div>
-                <div className="w-full md:w-2-3 flex flex-col bg-gray-800/50">
+                <div className="w-full lg:w-2/3 flex flex-col bg-gray-800/50 min-w-0">
                     <QueuePanel 
                         queue={queue}
                         currentSongId={currentSong?.id}
@@ -916,6 +912,14 @@ const App: React.FC = () => {
                     onUpdateCustomPalette={updateCustomPalette}
                     activeCustomColors={activeCustomColors}
                     onCustomColorChange={handleCustomColorChange}
+                />
+            )}
+
+            {isComparisonModalOpen && (
+                <ComparisonModal
+                    isOpen={isComparisonModalOpen}
+                    onClose={() => setIsComparisonModalOpen(false)}
+                    comparisonData={comparisonData}
                 />
             )}
         </div>

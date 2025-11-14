@@ -59,6 +59,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
     const [editingPaletteId, setEditingPaletteId] = useState<string | null>(null);
     const [editingPaletteName, setEditingPaletteName] = useState('');
+    const [newPaletteName, setNewPaletteName] = useState('');
     
     if (!isOpen) return null;
 
@@ -85,9 +86,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleSavePalette = () => {
-        const name = prompt("Enter a name for your new theme:", "My Custom Theme");
-        if (name) {
-            onSaveCustomPalette(name);
+        if (newPaletteName.trim()) {
+            onSaveCustomPalette(newPaletteName.trim());
+            setNewPaletteName('');
         }
     };
     
@@ -200,12 +201,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <input type="color" id="textColor" value={activeCustomColors.text} onChange={e => handleColorChange('text', e.target.value)} className="w-full h-10 p-1 bg-gray-600 border border-gray-500 rounded cursor-pointer" />
                                 </div>
                             </div>
-                             <button
-                                onClick={handleSavePalette}
-                                className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded transition-colors"
-                            >
-                                Save Current Colors as New Theme
-                            </button>
+                            <div className="flex items-center space-x-2">
+                                <input
+                                    type="text"
+                                    value={newPaletteName}
+                                    onChange={(e) => setNewPaletteName(e.target.value)}
+                                    placeholder="Enter new theme name"
+                                    className="flex-grow bg-gray-900 border border-gray-500 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                                <button
+                                    onClick={handleSavePalette}
+                                    className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded transition-colors disabled:bg-gray-500"
+                                    disabled={!newPaletteName.trim()}
+                                >
+                                    Save
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

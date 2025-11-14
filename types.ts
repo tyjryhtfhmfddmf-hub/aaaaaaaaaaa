@@ -24,3 +24,13 @@ export interface CustomPalette {
     text: string;
   };
 }
+
+export interface ComparisonData {
+    localUser: string;
+    remoteUser: string;
+    commonSongs: Song[];
+    localOnlySongs: Song[];
+    remoteOnlySongs: Song[];
+    localPercentage: number;
+    remotePercentage: number;
+}
