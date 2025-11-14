@@ -12,6 +12,7 @@ interface NetworkPanelProps {
     onShareQueue: () => void;
     onSharePlaylist: (playlistId: string) => void;
     onSyncCommon: () => void;
+    onCompareLibraries: () => void;
     playlists: Playlist[];
 }
 
@@ -25,14 +26,17 @@ export const NetworkPanel: React.FC<NetworkPanelProps> = ({
     onShareQueue,
     onSharePlaylist,
     onSyncCommon,
+    onCompareLibraries,
     playlists,
 }) => {
     const [joinCode, setJoinCode] = useState('');
     const [selectedPlaylistId, setSelectedPlaylistId] = useState<string>('');
+    const [showPlaylistDropdown, setShowPlaylistDropdown] = useState<boolean>(false);
 
     const handleSharePlaylistClick = () => {
         if (selectedPlaylistId) {
             onSharePlaylist(selectedPlaylistId);
+            setShowPlaylistDropdown(false); // Close dropdown after sharing
         } else {
             alert('Please select a playlist to share.');
         }
@@ -67,28 +71,34 @@ export const NetworkPanel: React.FC<NetworkPanelProps> = ({
                         </div>
                          <div className="grid grid-cols-2 gap-2 pt-2">
                             <button onClick={onShareQueue} className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded">Share Queue</button>
-                            <div className="flex flex-col space-y-1">
-                                <select
-                                    value={selectedPlaylistId}
-                                    onChange={(e) => setSelectedPlaylistId(e.target.value)}
-                                    className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                >
-                                    <option value="">Select Playlist</option>
-                                    {playlists.map(playlist => (
-                                        <option key={playlist.id} value={playlist.id}>
-                                            {playlist.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                <button
-                                    onClick={handleSharePlaylistClick}
-                                    className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded"
-                                    disabled={!selectedPlaylistId}
-                                >
-                                    Share Selected Playlist
-                                </button>
-                            </div>
+                            <button onClick={() => setShowPlaylistDropdown(prev => !prev)} className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded">
+                                {showPlaylistDropdown ? 'Cancel Share Playlist' : 'Share Playlist'}
+                            </button>
+                            {showPlaylistDropdown && (
+                                <div className="col-span-2 flex flex-col space-y-1">
+                                    <select
+                                        value={selectedPlaylistId}
+                                        onChange={(e) => setSelectedPlaylistId(e.target.value)}
+                                        className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    >
+                                        <option value="">Select Playlist</option>
+                                        {playlists.map(playlist => (
+                                            <option key={playlist.id} value={playlist.id}>
+                                                {playlist.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={handleSharePlaylistClick}
+                                        className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded"
+                                        disabled={!selectedPlaylistId}
+                                    >
+                                        Share Selected Playlist
+                                    </button>
+                                </div>
+                            )}
                             <button onClick={onSyncCommon} className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded">Sync Common</button>
+                            <button onClick={onCompareLibraries} className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded">Compare Libraries</button>
                         </div>
                     </div>
                 );

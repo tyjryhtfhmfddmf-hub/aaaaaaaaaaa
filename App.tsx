@@ -125,6 +125,7 @@ const App: React.FC = () => {
     const [customPalettes, setCustomPalettes] = useState<CustomPalette[]>([]);
     const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
     const [comparisonData, setComparisonData] = useState<ComparisonData | null>(null);
+    const [remoteLibrary, setRemoteLibrary] = useState<Song[]>([]);
     const [activeCustomColors, setActiveCustomColors] = useState({
         primary: '#4f46e5',
         accent: '#818cf8',
@@ -645,7 +646,7 @@ const App: React.FC = () => {
                         break;
                     case 'libraryUpdate':
                         const remoteLibraryUpdate = message.payload.library as Omit<Song, 'file'>[];
-                        handleCompareLibraries(remoteLibraryUpdate.map(song => ({ ...song, isRemote: true })));
+                        setRemoteLibrary(remoteLibraryUpdate.map(song => ({ ...song, isRemote: true })));
                         setLibrary(prevLibrary => {
                             const currentLibraryIds = new Set(prevLibrary.map(s => s.id));
                             const newSongs = remoteLibraryUpdate
@@ -774,6 +775,14 @@ const App: React.FC = () => {
         }
     }, []);
 
+    const handleCompareLibrariesButtonClick = useCallback(() => {
+        if (remoteLibrary.length > 0) {
+            handleCompareLibraries(remoteLibrary);
+        } else {
+            alert('No remote library received yet. Wait for a user to connect.');
+        }
+    }, [remoteLibrary, handleCompareLibraries]);
+
     useEffect(() => {
         return () => {
             websocketRef.current?.close();
@@ -837,6 +846,7 @@ const App: React.FC = () => {
                         onShareQueue={handleShareQueue}
                         onSharePlaylist={handleSharePlaylist}
                         onSyncCommon={handleSyncCommon}
+                        onCompareLibraries={handleCompareLibrariesButtonClick}
                         playlists={playlists}
                     />
                 </div>
