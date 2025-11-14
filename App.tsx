@@ -175,16 +175,20 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const songToPlay = queue[currentSongIndex];
-        if (songToPlay && !songToPlay.isRemote && songToPlay.file) {
-            const url = URL.createObjectURL(songToPlay.file as File);
-            setActiveUrl(url);
-            if (audioRef.current) {
-                audioRef.current.src = url;
-                audioRef.current.play().catch(e => console.error("Error playing audio:", e));
-                setIsPlaying(true);
+        if (songToPlay) {
+            if (songToPlay.isRemote && !songToPlay.file) {
+                handleDownloadSong(songToPlay.id);
+            } else if (!songToPlay.isRemote && songToPlay.file) {
+                const url = URL.createObjectURL(songToPlay.file as File);
+                setActiveUrl(url);
+                if (audioRef.current) {
+                    audioRef.current.src = url;
+                    audioRef.current.play().catch(e => console.error("Error playing audio:", e));
+                    setIsPlaying(true);
+                }
             }
         }
-    }, [queue, currentSongIndex]);
+    }, [queue, currentSongIndex, handleDownloadSong]);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -487,10 +491,6 @@ const App: React.FC = () => {
   };
 
     const addToQueue = (song: Song) => {
-        if (song.isRemote && !song.file) {
-            alert("Cannot add a remote song to the queue until it has been downloaded.");
-            return;
-        }
         if (!queue.some(s => s.id === song.id)) {
             setQueue(prev => [...prev, song]);
         } else {
@@ -591,6 +591,21 @@ const App: React.FC = () => {
         localStorage.setItem('music_playlists', JSON.stringify(newPlaylists));
     };
 
+    const handleDownloadSong = useCallback((songId: string) => {
+        const songToDownload = library.find(s => s.id === songId);
+        if (songToDownload && songToDownload.isRemote) {
+            if (websocketRef.current?.readyState === WebSocket.OPEN) {
+                websocketRef.current.send(JSON.stringify({
+                    type: 'requestSongFile',
+                    payload: { songKey: getSongKey(songToDownload) }
+                }));
+                alert(`Requesting "${songToDownload.title}"...`);
+            } else {
+                alert('Not connected to a session. Cannot download songs.');
+            }
+        }
+    }, [library]);
+
     const clearQueue = useCallback(() => {
         setQueue([]);
         setCurrentSongIndex(-1);
@@ -634,16 +649,7 @@ const App: React.FC = () => {
     useEffect(() => {
         if (networkStatus === 'connected') {
             shareFullLibrary(); // Initial share on connect
-            // FIX: Use `window.setInterval` to avoid type conflicts with NodeJS.Timeout
-            syncIntervalRef.current = window.setInterval(shareFullLibrary, 30000); // And every 30s
         }
-        return () => {
-            if (syncIntervalRef.current) {
-                // FIX: Use `window.clearInterval` to match `window.setInterval`
-                window.clearInterval(syncIntervalRef.current);
-                syncIntervalRef.current = null;
-            }
-        };
     }, [networkStatus, shareFullLibrary]);
 
     const initWebSocket = useCallback((onOpenCallback: () => void) => {
@@ -706,6 +712,9 @@ const App: React.FC = () => {
                             return prevLibrary;
                         });
                         break;
+                    case 'requestLibraryShare':
+                        shareFullLibrary();
+                        break;
                     case 'playlistUpdate':
                         const { playlist } = message.payload;
                         alert(`Playlist "${playlist.name}" has been shared by a user in room ${roomCode}.`);
@@ -750,19 +759,48 @@ const App: React.FC = () => {
                             if (newChunks[chunkSongKey].received === newChunks[chunkSongKey].total) {
                                 const receivedSong = library.find(s => getSongKey(s) === chunkSongKey);
                                 if (receivedSong) {
-                                    const fileBlob = new Blob(newChunks[chunkSongKey].chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' }); // Adjust type if needed
-                                    const newFile = new File([fileBlob], receivedSong.title, { type: fileBlob.type });
-                                    const updatedSong = { ...receivedSong, file: newFile, isRemote: false };
+                                    const fileBlob = new Blob(newChunks[chunkSongKey].chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' });
+                                    const newFile = new File([fileBlob], `${receivedSong.title}.mp3`, { type: fileBlob.type });
                                     
-                                    updateSongInDB(receivedSong.id, { file: newFile, isRemote: false });
+                                    const reader = new FileReader();
+                                    reader.onload = async (event) => {
+                                        const arrayBuffer = event.target.result;
+                                        const jsmediatags = (window as any).jsmediatags;
+
+                                        let albumArt = receivedSong.albumArt;
+                                        try {
+                                            const tags = await new Promise((resolve, reject) => {
+                                                jsmediatags.read(newFile, { onSuccess: resolve, onError: reject });
+                                            });
+                                            const { picture } = tags.tags;
+                                            if (picture) {
+                                                const artBlob = new Blob([new Uint8Array(picture.data)], { type: picture.format });
+                                                albumArt = await blobToDataURL(artBlob);
+                                            }
+                                        } catch (error) {
+                                            console.error("Error reading tags from downloaded file, preserving old album art.", error);
+                                        }
+
+                                        const updatedSong = {
+                                            ...receivedSong,
+                                            file: newFile,
+                                            isRemote: false,
+                                            albumArt: albumArt
+                                        };
+
+                                        // Update the song in IndexedDB
+                                        updateSongInDB(receivedSong.id, { file: newFile, isRemote: false, albumArt: albumArt ? new Blob([await fetch(albumArt).then(r => r.arrayBuffer())]) : undefined });
+
+                                        // Update state
+                                        setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
+                                        setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
+
+                                        alert(`${receivedSong.title} has been downloaded!`);
+                                    };
+                                    reader.readAsArrayBuffer(fileBlob);
                                     
-                                    setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
-                                    
-                                    // Also update in queue
-                                    setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
-                                    
+                                    // Clean up
                                     delete newChunks[chunkSongKey];
-                                    alert(`${receivedSong.title} has been downloaded!`);
                                 }
                             }
                             return newChunks;
@@ -946,6 +984,7 @@ const App: React.FC = () => {
                         onOpenSettings={() => setIsSettingsModalOpen(true)}
                         onUpdateSong={handleUpdateSongMetadata}
                         onRemoveSong={handleRemoveSongFromLibrary}
+                        onDownloadSong={handleDownloadSong}
                     />
                     <NetworkPanel
                         status={networkStatus}

@@ -12,6 +12,13 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 // In-memory storage for rooms. A Map of roomCode -> Set of clients.
 const rooms = new Map();
 
+const getSongKey = (song) => {
+    // Fallback for older song objects that might not have a clean title/artist
+    const title = song.title || 'Unknown Title';
+    const artist = song.artist || 'Unknown Artist';
+    return `${title.trim()}-${artist.trim()}`.toLowerCase();
+};
+
 /**
  * Generates a unique 6-character uppercase alphanumeric room code.
  * @returns {string} A unique room code.
@@ -33,6 +40,7 @@ wss.on('connection', (ws) => {
 
     let clientRoomCode = null; // Store the room code for this client
     ws.library = []; // Add a library property to the WebSocket client
+    ws.songKeys = new Set(); // Store a set of song keys for efficient lookup
 
     const cleanupClient = () => {
         if (clientRoomCode && rooms.has(clientRoomCode)) {
@@ -69,14 +77,23 @@ wss.on('connection', (ws) => {
                 // A client wants to join an existing room.
                 const { roomCode } = data.payload;
                 if (rooms.has(roomCode)) {
+                    const room = rooms.get(roomCode);
+                    // Notify existing clients to share their library for the newcomer
+                    const requestMessage = JSON.stringify({ type: 'requestLibraryShare' });
+                    room.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(requestMessage);
+                        }
+                    });
+
                     cleanupClient(); // Clean up any previous room connection
-                    rooms.get(roomCode).add(ws);
+                    room.add(ws);
                     clientRoomCode = roomCode;
                     ws.send(JSON.stringify({
                         type: 'joined',
                         payload: { roomCode: roomCode }
                     }));
-                    console.log(`Client joined room: ${roomCode}`);
+                    console.log(`Client joined room: ${roomCode}, requested library share.`);
                 } else {
                     ws.send(JSON.stringify({
                         type: 'error',
@@ -102,7 +119,10 @@ wss.on('connection', (ws) => {
                 }
             } else if (type === 'shareLibrary') {
                 // A client is sharing their library metadata, store it.
-                ws.library = data.payload.library || [];
+                const receivedLibrary = data.payload.library || [];
+                ws.library = receivedLibrary;
+                ws.songKeys = new Set(receivedLibrary.map(getSongKey));
+
                 if (clientRoomCode && rooms.has(clientRoomCode)) {
                     const room = rooms.get(clientRoomCode);
                     const messageToSend = JSON.stringify({
@@ -230,16 +250,29 @@ wss.on('connection', (ws) => {
             } else if (type === 'requestSongFile') {
                 if (clientRoomCode && rooms.has(clientRoomCode)) {
                     const room = rooms.get(clientRoomCode);
-                    const otherClient = [...room].find(client => client !== ws);
-                    if (otherClient) {
+                    const { songKey } = data.payload;
+
+                    // Find a client in the room who has the song
+                    const songOwner = [...room].find(client => client.songKeys.has(songKey) && client !== ws);
+
+                    if (songOwner) {
+                        // Forward the request to the owner
                         const messageToSend = JSON.stringify({
                             type: 'requestSongFile',
                             payload: {
-                                songKey: data.payload.songKey,
-                                requester: ws.id // Assuming ws has a unique id, let's add one.
+                                songKey,
+                                requester: ws.id
                             }
                         });
-                        otherClient.send(messageToSend);
+                        songOwner.send(messageToSend);
+                        console.log(`Forwarded song request for "${songKey}" from client ${ws.id} to ${songOwner.id}`);
+                    } else {
+                        // Nobody in the room has the song
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            payload: { message: `Song "${songKey}" not found in this room.` }
+                        }));
+                        console.log(`Song request failed: "${songKey}" not found in room ${clientRoomCode}`);
                     }
                 }
             } else if (type === 'songFileChunk') {
