@@ -17,6 +17,7 @@ interface LibraryTabsProps {
     onOpenSettings: () => void;
     onUpdateSong: (songId: string, newMetadata: { title: string; artist: string; album: string }) => void;
     onRemoveSong: (songId: string) => void;
+    onDownloadSong: (song: Song) => void;
 }
 
 enum Tab {
@@ -41,6 +42,7 @@ export const LibraryTabs: React.FC<LibraryTabsProps> = (props) => {
         addToQueue: props.addToQueue,
         onUpdateSong: onUpdateSong,
         onRemoveSong: onRemoveSong,
+        onDownloadSong: props.onDownloadSong,
     };
     
     const playlistsPanelProps = {

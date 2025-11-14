@@ -8,9 +8,10 @@ interface LibraryPanelProps {
     addToQueue: (song: Song) => void;
     onUpdateSong: (songId: string, newMetadata: { title: string; artist: string; album: string }) => void;
     onRemoveSong: (songId: string) => void;
+    onDownloadSong: (song: Song) => void;
 }
 
-export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdded, addToQueue, onUpdateSong, onRemoveSong }) => {
+export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdded, addToQueue, onUpdateSong, onRemoveSong, onDownloadSong }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
     const [editingSongId, setEditingSongId] = useState<string | null>(null);
@@ -256,13 +257,13 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                             ) : (
                                 <li
                                     key={song.id}
-                                    onDoubleClick={!song.isRemote ? () => addToQueue(song) : undefined}
+                                    onDoubleClick={() => (song.isRemote ? onDownloadSong(song) : addToQueue(song))}
                                     draggable={!song.isRemote}
                                     onDragStart={!song.isRemote ? (e) => {
                                         e.dataTransfer.setData('song-id', song.id);
                                         e.dataTransfer.effectAllowed = 'copy';
                                     } : undefined}
-                                    className={`group flex items-center p-2 rounded-md transition-colors ${song.isRemote ? 'opacity-60 cursor-not-allowed' : 'hover:bg-gray-700 cursor-pointer'}`}
+                                    className={`group flex items-center p-2 rounded-md transition-colors ${song.isRemote ? 'opacity-60 hover:bg-gray-700 cursor-pointer' : 'hover:bg-gray-700 cursor-pointer'}`}
                                 >
                                     {song.albumArt ? (
                                         <img src={song.albumArt} alt={song.album} className="w-10 h-10 rounded-md mr-3 object-cover flex-shrink-0" />
@@ -279,6 +280,18 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                         <span className="text-sm text-gray-500 group-hover:hidden">
                                             {Math.floor(song.duration / 60)}:{(Math.floor(song.duration % 60)).toString().padStart(2, '0')}
                                         </span>
+                                        <div className={`hidden ${song.isRemote ? 'group-hover:flex' : ''} items-center`}>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDownloadSong(song);
+                                                }}
+                                                title="Download song"
+                                                className="p-2 rounded-full text-gray-400 hover:bg-indigo-600/50 hover:text-white"
+                                            >
+                                                <AddIcon />
+                                            </button>
+                                        </div>
                                         <div className={`hidden ${!song.isRemote ? 'group-hover:flex' : ''} items-center`}>
                                             <button
                                                 onClick={(e) => {

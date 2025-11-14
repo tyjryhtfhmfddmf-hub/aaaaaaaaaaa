@@ -717,7 +717,7 @@ const App: React.FC = () => {
                         if (songToSend && songToSend.file) {
                             const reader = new FileReader();
                             reader.onload = (e) => {
-                                const arrayBuffer = e.target.result;
+                                const arrayBuffer = e.target.result as ArrayBuffer;
                                 const chunkSize = 16384; // 16KB
                                 const totalChunks = Math.ceil(arrayBuffer.byteLength / chunkSize);
                                 for (let i = 0; i < totalChunks; i++) {
@@ -726,7 +726,7 @@ const App: React.FC = () => {
                                         type: 'songFileChunk',
                                         payload: {
                                             songKey,
-                                            chunk: Array.from(new Uint8Array(chunk as ArrayBuffer)),
+                                            chunk: Array.from(new Uint8Array(chunk)),
                                             chunkIndex: i,
                                             totalChunks,
                                             requester
@@ -752,9 +752,9 @@ const App: React.FC = () => {
                                 if (receivedSong) {
                                     const fileBlob = new Blob(newChunks[chunkSongKey].chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' }); // Adjust type if needed
                                     const newFile = new File([fileBlob], receivedSong.title, { type: fileBlob.type });
-                                    const updatedSong = { ...receivedSong, file: newFile, isRemote: false };
+                                    const updatedSong = { ...receivedSong, file: newFile, isRemote: false, albumArt: receivedSong.albumArt };
                                     
-                                    updateSongInDB(receivedSong.id, { file: newFile, isRemote: false });
+                                    updateSongInDB(receivedSong.id, { file: newFile, isRemote: false, albumArt: receivedSong.albumArt });
                                     
                                     setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
                                     
@@ -893,6 +893,19 @@ const App: React.FC = () => {
         }
     }, [remoteLibrary, handleCompareLibraries]);
 
+    const handleRequestSong = useCallback((song: Song) => {
+        if (websocketRef.current?.readyState === WebSocket.OPEN) {
+            const songKey = getSongKey(song);
+            console.log(`Requesting song: ${song.title} (${songKey})`);
+            websocketRef.current.send(JSON.stringify({
+                type: 'requestSongFile',
+                payload: { songKey }
+            }));
+        } else {
+            alert('Not connected to a session.');
+        }
+    }, []);
+
     useEffect(() => {
         return () => {
             websocketRef.current?.close();
@@ -900,6 +913,14 @@ const App: React.FC = () => {
     }, []);
     
     const currentSong = currentSongIndex !== -1 ? queue[currentSongIndex] : null;
+
+    const filteredLibraryForDisplay = React.useMemo(() => {
+        const localSongKeys = new Set(library.filter(s => !s.isRemote).map(getSongKey));
+        return library.filter(song => {
+            if (!song.isRemote) return true;
+            return !localSongKeys.has(getSongKey(song));
+        });
+    }, [library]);
 
     useEffect(() => {
         const resetColor = () => {
@@ -936,7 +957,7 @@ const App: React.FC = () => {
             <main className="relative flex-1 flex flex-col lg:flex-row overflow-hidden">
                 <div className="w-full lg:w-1/3 flex flex-col border-r border-gray-800 bg-gray-900 overflow-hidden min-w-0">
                     <LibraryTabs 
-                        library={library}
+                        library={filteredLibraryForDisplay}
                         onSongsAdded={handleSongsAdded}
                         playlists={playlists}
                         addToQueue={addToQueue}
@@ -946,6 +967,7 @@ const App: React.FC = () => {
                         onOpenSettings={() => setIsSettingsModalOpen(true)}
                         onUpdateSong={handleUpdateSongMetadata}
                         onRemoveSong={handleRemoveSongFromLibrary}
+                        onDownloadSong={handleRequestSong}
                     />
                     <NetworkPanel
                         status={networkStatus}
