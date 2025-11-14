@@ -144,6 +144,11 @@ const App: React.FC = () => {
     const [comparisonData, setComparisonData] = useState<ComparisonData | null>(null);
     const [remoteLibrary, setRemoteLibrary] = useState<Song[]>([]);
     const [fileChunks, setFileChunks] = useState<Record<string, { chunks: any[], received: number, total: number }>>({});
+    const [activeCustomColors, setActiveCustomColors] = useState<CustomPalette['colors']>({
+        primary: '#4F46E5',
+        accent: '#34D399',
+        text: '#E5E7EB',
+    });
 
     // --- Network State ---
     const [networkStatus, setNetworkStatus] = useState<NetworkStatus>('offline');
