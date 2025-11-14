@@ -27,6 +27,7 @@ const generateRoomCode = () => {
 wss.on('connection', (ws) => {
     console.log('Client connected');
     let clientRoomCode = null; // Store the room code for this client
+    ws.library = []; // Add a library property to the WebSocket client
 
     const cleanupClient = () => {
         if (clientRoomCode && rooms.has(clientRoomCode)) {
@@ -95,7 +96,8 @@ wss.on('connection', (ws) => {
                     console.log(`Queue shared in room: ${clientRoomCode}`);
                 }
             } else if (type === 'shareLibrary') {
-                // A client is sharing their library metadata.
+                // A client is sharing their library metadata, store it.
+                ws.library = data.payload.library || [];
                 if (clientRoomCode && rooms.has(clientRoomCode)) {
                     const room = rooms.get(clientRoomCode);
                     const messageToSend = JSON.stringify({
@@ -111,14 +113,115 @@ wss.on('connection', (ws) => {
                     console.log(`Library changes broadcasted in room: ${clientRoomCode}`);
                 }
             } else if (type === 'sharePlaylist') {
-                console.log(`Received sharePlaylist in room ${clientRoomCode}:`, data.payload);
-                // Placeholder for future implementation
+                if (clientRoomCode && rooms.has(clientRoomCode)) {
+                    const room = rooms.get(clientRoomCode);
+                    const messageToSend = JSON.stringify({
+                        type: 'playlistUpdate',
+                        payload: { playlist: data.payload.playlist }
+                    });
+                    // Broadcast to everyone else in the room
+                    room.forEach(client => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(messageToSend);
+                        }
+                    });
+                    console.log(`Playlist shared in room: ${clientRoomCode}`);
+                }
             } else if (type === 'compareLibraries') {
-                console.log(`Received compareLibraries in room ${clientRoomCode}:`, data.payload);
-                // Placeholder for future implementation
+                if (clientRoomCode && rooms.has(clientRoomCode)) {
+                    const room = rooms.get(clientRoomCode);
+                    const senderLibrary = data.payload.library || [];
+                    
+                    if (room.size < 2) {
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            payload: { message: 'You are the only one in the room.' }
+                        }));
+                        return;
+                    }
+
+                    // For simplicity, this example compares the sender with the *first* other user.
+                    // A more complex implementation might let the user choose who to compare with.
+                    const otherClient = [...room].find(client => client !== ws);
+
+                    if (otherClient && otherClient.library && otherClient.library.length > 0) {
+                        const remoteLibrary = otherClient.library;
+
+                        const senderSongIds = new Set(senderLibrary.map(s => s.id));
+                        const remoteSongIds = new Set(remoteLibrary.map(s => s.id));
+
+                        const commonSongs = senderLibrary.filter(song => remoteSongIds.has(song.id));
+                        const localOnlySongs = senderLibrary.filter(song => !remoteSongIds.has(song.id));
+                        const remoteOnlySongs = remoteLibrary.filter(song => !senderSongIds.has(song.id));
+                        
+                        const localPercentage = senderLibrary.length > 0 ? (commonSongs.length / senderLibrary.length) * 100 : 0;
+                        const remotePercentage = remoteLibrary.length > 0 ? (commonSongs.length / remoteLibrary.length) * 100 : 0;
+
+                        const results = {
+                            localUser: 'You',
+                            remoteUser: 'User 2', // Generic name, could be improved with user profiles
+                            commonSongs,
+                            localOnlySongs,
+                            remoteOnlySongs,
+                            localPercentage: localPercentage.toFixed(0),
+                            remotePercentage: remotePercentage.toFixed(0),
+                        };
+                        
+                        ws.send(JSON.stringify({
+                            type: 'comparisonResult',
+                            payload: { results }
+                        }));
+
+                    } else {
+                         ws.send(JSON.stringify({
+                            type: 'error',
+                            payload: { message: 'No other users with a shared library found to compare with.' }
+                        }));
+                    }
+                }
             } else if (type === 'syncCommon') {
-                console.log(`Received syncCommon in room ${clientRoomCode}`);
-                // Placeholder for future implementation
+                if (clientRoomCode && rooms.has(clientRoomCode)) {
+                    const room = rooms.get(clientRoomCode);
+                    const allLibraries = [];
+                    room.forEach(client => {
+                        if (client.library && client.library.length > 0) {
+                            allLibraries.push(client.library);
+                        }
+                    });
+
+                    if (allLibraries.length < 2) {
+                        console.log('Not enough libraries to compare for syncCommon.');
+                        return; // Or send a message back to the user
+                    }
+
+                    // Find the intersection of all libraries
+                    const commonSongs = allLibraries.reduce((acc, library) => {
+                        const songIds = new Set(library.map(s => s.id));
+                        return acc.filter(song => songIds.has(song.id));
+                    });
+
+                    // Shuffle the common songs
+                    for (let i = commonSongs.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [commonSongs[i], commonSongs[j]] = [commonSongs[j], commonSongs[i]];
+                    }
+
+                    const commonSongIds = commonSongs.map(s => s.id);
+                    
+                    const messageToSend = JSON.stringify({
+                        type: 'queueUpdate',
+                        payload: { queue: commonSongIds }
+                    });
+
+                    // Broadcast the new queue to everyone in the room
+                    room.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(messageToSend);
+                        }
+                    });
+
+                    console.log(`Synced common songs and updated queue for room: ${clientRoomCode}`);
+                }
             } else if (type === 'leave') {
                 // Client explicitly leaves
                 cleanupClient();
