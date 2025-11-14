@@ -1,7 +1,7 @@
 
 import type { Song } from '../types';
 
-const getSongKey = (song: Song) => `${song.title?.toLowerCase()}-${song.artist?.toLowerCase()}`;
+export const getSongKey = (song: Song) => `${song.title?.toLowerCase()}-${song.artist?.toLowerCase()}`;
 
 export const compareLibraries = (localUser: string, remoteUser: string, localLibrary: Song[], remoteLibrary: Song[]) => {
     const localSongKeys = new Set(localLibrary.map(getSongKey));
