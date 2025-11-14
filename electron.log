@@ -1,8 +1,0 @@
-
-> music-sync-desktop@1.0.0 electron:dev
-> concurrently "npm:start" "wait-on http://localhost:5173 && electron ."
-
-[start]
-[start] > music-sync-desktop@1.0.0 start
-[start] > vite
-[start]

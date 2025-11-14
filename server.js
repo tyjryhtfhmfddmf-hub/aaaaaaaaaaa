@@ -39,6 +39,7 @@ wss.on('connection', (ws) => {
     ws.send(JSON.stringify({ type: 'connected', payload: { id: ws.id } }));
 
     let clientRoomCode = null; // Store the room code for this client
+    ws.library = []; // Add a library property to the WebSocket client
     ws.songKeys = new Set(); // Store a set of song keys for efficient lookup
 
     const cleanupClient = () => {
@@ -76,14 +77,23 @@ wss.on('connection', (ws) => {
                 // A client wants to join an existing room.
                 const { roomCode } = data.payload;
                 if (rooms.has(roomCode)) {
+                    const room = rooms.get(roomCode);
+                    // Notify existing clients to share their library for the newcomer
+                    const requestMessage = JSON.stringify({ type: 'requestLibraryShare' });
+                    room.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(requestMessage);
+                        }
+                    });
+
                     cleanupClient(); // Clean up any previous room connection
-                    rooms.get(roomCode).add(ws);
+                    room.add(ws);
                     clientRoomCode = roomCode;
                     ws.send(JSON.stringify({
                         type: 'joined',
                         payload: { roomCode: roomCode }
                     }));
-                    console.log(`Client joined room: ${roomCode}`);
+                    console.log(`Client joined room: ${roomCode}, requested library share.`);
                 } else {
                     ws.send(JSON.stringify({
                         type: 'error',
@@ -110,6 +120,7 @@ wss.on('connection', (ws) => {
             } else if (type === 'shareLibrary') {
                 // A client is sharing their library metadata, store it.
                 const receivedLibrary = data.payload.library || [];
+                ws.library = receivedLibrary;
                 ws.songKeys = new Set(receivedLibrary.map(getSongKey));
 
                 if (clientRoomCode && rooms.has(clientRoomCode)) {
