@@ -156,7 +156,6 @@ const App: React.FC = () => {
     const [isHost, setIsHost] = useState<boolean>(false);
     const [clientId, setClientId] = useState<number | null>(null);
     const websocketRef = useRef<WebSocket | null>(null);
-    // FIX: The return type of `setInterval` in a browser environment is a `number`, not `NodeJS.Timeout`.
     const syncIntervalRef = useRef<number | null>(null);
 
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -634,13 +633,11 @@ const App: React.FC = () => {
     useEffect(() => {
         if (networkStatus === 'connected') {
             shareFullLibrary(); // Initial share on connect
-            // FIX: Use `window.setInterval` to avoid type conflicts with NodeJS.Timeout
-            syncIntervalRef.current = window.setInterval(shareFullLibrary, 30000); // And every 30s
+            syncIntervalRef.current = setInterval(shareFullLibrary, 30000); // And every 30s
         }
         return () => {
             if (syncIntervalRef.current) {
-                // FIX: Use `window.clearInterval` to match `window.setInterval`
-                window.clearInterval(syncIntervalRef.current);
+                clearInterval(syncIntervalRef.current);
                 syncIntervalRef.current = null;
             }
         };

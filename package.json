@@ -21,15 +21,18 @@
   "license": "ISC",
   "dependencies": {
     "express": "^4.19.2",
-    "ws": "^8.17.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "ws": "^8.17.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.22",
     "concurrently": "^8.2.2",
     "electron": "^29.1.0",
     "electron-builder": "^24.9.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.17",
     "vite": "^5.1.4",
     "wait-on": "^7.2.0"
   },
