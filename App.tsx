@@ -10,7 +10,7 @@ import { SavePlaylistModal } from './components/SavePlaylistModal';
 import { SettingsModal } from './components/SettingsModal';
 import { StatusBar } from './components/StatusBar';
 import { ComparisonModal } from './components/ComparisonModal';
-import { compareLibraries } from './lib/utils';
+import { compareLibraries, getSongKey } from './lib/utils';
 import type { Song, Playlist, CustomPalette, ComparisonData } from './types';
 
 // --- IndexedDB Helpers ---
@@ -72,6 +72,23 @@ const getSongsFromDB = (): Promise<any[]> => {
     });
 };
 
+const removeSongFromDB = (songId: string): Promise<void> => {
+    return new Promise(async (resolve, reject) => {
+        const db = await initDB();
+        const transaction = db.transaction(SONG_STORE, 'readwrite');
+        const store = transaction.objectStore(SONG_STORE);
+        const request = store.delete(songId);
+        transaction.oncomplete = () => {
+            db.close();
+            resolve();
+        };
+        transaction.onerror = () => {
+            db.close();
+            reject(transaction.error);
+        };
+    });
+};
+
 const updateSongInDB = (songId: string, updatedData: Partial<Song>): Promise<void> => {
     return new Promise(async (resolve, reject) => {
         const db = await initDB();
@@ -126,16 +143,13 @@ const App: React.FC = () => {
     const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
     const [comparisonData, setComparisonData] = useState<ComparisonData | null>(null);
     const [remoteLibrary, setRemoteLibrary] = useState<Song[]>([]);
-    const [activeCustomColors, setActiveCustomColors] = useState({
-        primary: '#4f46e5',
-        accent: '#818cf8',
-        text: '#c7d2fe',
-    });
-    
+    const [fileChunks, setFileChunks] = useState<Record<string, { chunks: any[], received: number, total: number }>>({});
+
     // --- Network State ---
     const [networkStatus, setNetworkStatus] = useState<NetworkStatus>('offline');
     const [roomCode, setRoomCode] = useState<string>('');
     const [isHost, setIsHost] = useState<boolean>(false);
+    const [clientId, setClientId] = useState<number | null>(null);
     const websocketRef = useRef<WebSocket | null>(null);
     // FIX: The return type of `setInterval` in a browser environment is a `number`, not `NodeJS.Timeout`.
     const syncIntervalRef = useRef<number | null>(null);
@@ -153,6 +167,19 @@ const App: React.FC = () => {
             reader.readAsDataURL(blob);
         });
     };
+
+    useEffect(() => {
+        const songToPlay = queue[currentSongIndex];
+        if (songToPlay && !songToPlay.isRemote && songToPlay.file) {
+            const url = URL.createObjectURL(songToPlay.file as File);
+            setActiveUrl(url);
+            if (audioRef.current) {
+                audioRef.current.src = url;
+                audioRef.current.play().catch(e => console.error("Error playing audio:", e));
+                setIsPlaying(true);
+            }
+        }
+    }, [queue, currentSongIndex]);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -337,6 +364,30 @@ const App: React.FC = () => {
         setLibrary(prev => [...prev, ...processedSongs]);
     };
 
+    const handleRemoveSongFromLibrary = async (songId: string) => {
+        // Remove from library state
+        setLibrary(prevLibrary => prevLibrary.filter(song => song.id !== songId));
+
+        // Remove from any playlists
+        const newPlaylists = playlists.map(playlist => ({
+            ...playlist,
+            songIds: playlist.songIds.filter(id => id !== songId),
+        }));
+        setPlaylists(newPlaylists);
+        localStorage.setItem('music_playlists', JSON.stringify(newPlaylists));
+
+        // Also remove from queue if it exists there
+        removeFromQueue(songId);
+
+        // Remove from DB
+        try {
+            await removeSongFromDB(songId);
+        } catch (error) {
+            console.error(`Failed to remove song ${songId} from DB:`, error);
+            // Consider adding user-facing error feedback here
+        }
+    };
+
     const handleUpdateSongMetadata = async (songId: string, newMetadata: { title: string; artist: string; album: string }) => {
         setLibrary(prevLibrary => 
             prevLibrary.map(song => 
@@ -361,7 +412,15 @@ const App: React.FC = () => {
         if (index >= 0 && index < queue.length && audioRef.current) {
              const songToPlay = queue[index];
             if (songToPlay.isRemote) {
-                alert("This song is from another user's library and cannot be played.");
+                if (websocketRef.current?.readyState === WebSocket.OPEN) {
+                    websocketRef.current.send(JSON.stringify({
+                        type: 'requestSongFile',
+                        payload: { songKey: getSongKey(songToPlay), requester: clientId }
+                    }));
+                    alert(`Requesting ${songToPlay.title} from the other user...`);
+                } else {
+                    alert("Not connected to a session. Cannot request song.");
+                }
                 return;
             }
 
@@ -376,7 +435,7 @@ const App: React.FC = () => {
             setCurrentSongIndex(index);
             setIsPlaying(true);
         }
-    }, [queue, activeUrl]);
+    }, [queue, activeUrl, clientId]);
 
     const handlePlayPause = useCallback(() => {
         if (isPlaying) {
@@ -448,8 +507,8 @@ const App: React.FC = () => {
   };
 
     const addToQueue = (song: Song) => {
-        if (song.isRemote) {
-            alert("Cannot add a remote song to the queue.");
+        if (song.isRemote && !song.file) {
+            alert("Cannot add a remote song to the queue until it has been downloaded.");
             return;
         }
         if (!queue.some(s => s.id === song.id)) {
@@ -629,6 +688,9 @@ const App: React.FC = () => {
                 console.log('Received message:', message);
 
                 switch (message.type) {
+                    case 'connected':
+                        setClientId(message.payload.id);
+                        break;
                     case 'hosted':
                         setIsHost(true);
                         setRoomCode(message.payload.roomCode);
@@ -638,8 +700,9 @@ const App: React.FC = () => {
                         setRoomCode(message.payload.roomCode);
                         break;
                     case 'queueUpdate':
-                        const newQueue = message.payload.queue
-                            .map((id: string) => library.find(song => song.id === id))
+                        const receivedQueueKeys = message.payload.queue as string[];
+                        const newQueue = receivedQueueKeys
+                            .map(key => library.find(song => getSongKey(song) === key))
                             .filter((s): s is Song => !!s);
                         setQueue(newQueue);
                         alert(`Queue has been updated by a user in room ${roomCode}.`);
@@ -667,6 +730,63 @@ const App: React.FC = () => {
                         const { playlist } = message.payload;
                         alert(`Playlist "${playlist.name}" has been shared by a user in room ${roomCode}.`);
                         // Further implementation would involve adding this playlist to the client's playlists state
+                        break;
+                    case 'requestSongFile':
+                        const { songKey, requester } = message.payload;
+                        const songToSend = library.find(song => getSongKey(song) === songKey);
+                        if (songToSend && songToSend.file) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                const arrayBuffer = e.target.result;
+                                const chunkSize = 16384; // 16KB
+                                const totalChunks = Math.ceil(arrayBuffer.byteLength / chunkSize);
+                                for (let i = 0; i < totalChunks; i++) {
+                                    const chunk = arrayBuffer.slice(i * chunkSize, (i + 1) * chunkSize);
+                                    websocketRef.current?.send(JSON.stringify({
+                                        type: 'songFileChunk',
+                                        payload: {
+                                            songKey,
+                                            chunk: Array.from(new Uint8Array(chunk as ArrayBuffer)),
+                                            chunkIndex: i,
+                                            totalChunks,
+                                            requester
+                                        }
+                                    }));
+                                }
+                            };
+                            reader.readAsArrayBuffer(songToSend.file);
+                        }
+                        break;
+                    case 'songFileChunk':
+                        const { songKey: chunkSongKey, chunk, chunkIndex, totalChunks } = message.payload;
+                        setFileChunks(prev => {
+                            const newChunks = { ...prev };
+                            if (!newChunks[chunkSongKey]) {
+                                newChunks[chunkSongKey] = { chunks: [], received: 0, total: totalChunks };
+                            }
+                            newChunks[chunkSongKey].chunks[chunkIndex] = chunk;
+                            newChunks[chunkSongKey].received++;
+
+                            if (newChunks[chunkSongKey].received === newChunks[chunkSongKey].total) {
+                                const receivedSong = library.find(s => getSongKey(s) === chunkSongKey);
+                                if (receivedSong) {
+                                    const fileBlob = new Blob(newChunks[chunkSongKey].chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' }); // Adjust type if needed
+                                    const newFile = new File([fileBlob], receivedSong.title, { type: fileBlob.type });
+                                    const updatedSong = { ...receivedSong, file: newFile, isRemote: false };
+                                    
+                                    updateSongInDB(receivedSong.id, { file: newFile, isRemote: false });
+                                    
+                                    setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
+                                    
+                                    // Also update in queue
+                                    setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
+                                    
+                                    delete newChunks[chunkSongKey];
+                                    alert(`${receivedSong.title} has been downloaded!`);
+                                }
+                            }
+                            return newChunks;
+                        });
                         break;
                     case 'left':
                         ws.close();
@@ -729,11 +849,11 @@ const App: React.FC = () => {
 
     const handleShareQueue = useCallback(() => {
         if (websocketRef.current?.readyState === WebSocket.OPEN) {
-            const queueIds = queue.map(s => s.id);
-            console.log('Sharing queue with IDs:', queueIds);
+            const queueKeys = queue.map(getSongKey);
+            console.log('Sharing queue with keys:', queueKeys);
             websocketRef.current.send(JSON.stringify({
                 type: 'shareQueue',
-                payload: { queue: queueIds }
+                payload: { queue: queueKeys }
             }));
             alert('Queue shared with the room!');
         } else {
@@ -835,6 +955,7 @@ const App: React.FC = () => {
                         updatePlaylistName={updatePlaylistName}
                         onOpenSettings={() => setIsSettingsModalOpen(true)}
                         onUpdateSong={handleUpdateSongMetadata}
+                        onRemoveSong={handleRemoveSongFromLibrary}
                     />
                     <NetworkPanel
                         status={networkStatus}

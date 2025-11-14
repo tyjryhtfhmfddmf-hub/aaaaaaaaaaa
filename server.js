@@ -24,8 +24,13 @@ const generateRoomCode = () => {
     return code;
 };
 
+let nextClientId = 1;
+
 wss.on('connection', (ws) => {
-    console.log('Client connected');
+    ws.id = nextClientId++;
+    console.log(`Client connected with id ${ws.id}`);
+    ws.send(JSON.stringify({ type: 'connected', payload: { id: ws.id } }));
+
     let clientRoomCode = null; // Store the room code for this client
     ws.library = []; // Add a library property to the WebSocket client
 
@@ -221,6 +226,34 @@ wss.on('connection', (ws) => {
                     });
 
                     console.log(`Synced common songs and updated queue for room: ${clientRoomCode}`);
+                }
+            } else if (type === 'requestSongFile') {
+                if (clientRoomCode && rooms.has(clientRoomCode)) {
+                    const room = rooms.get(clientRoomCode);
+                    const otherClient = [...room].find(client => client !== ws);
+                    if (otherClient) {
+                        const messageToSend = JSON.stringify({
+                            type: 'requestSongFile',
+                            payload: {
+                                songKey: data.payload.songKey,
+                                requester: ws.id // Assuming ws has a unique id, let's add one.
+                            }
+                        });
+                        otherClient.send(messageToSend);
+                    }
+                }
+            } else if (type === 'songFileChunk') {
+                if (clientRoomCode && rooms.has(clientRoomCode)) {
+                    const room = rooms.get(clientRoomCode);
+                    // Find the original requester
+                    const requester = [...room].find(client => client.id === data.payload.requester);
+                    if (requester) {
+                        // Send the chunk to the requester
+                        requester.send(JSON.stringify({
+                            type: 'songFileChunk',
+                            payload: data.payload
+                        }));
+                    }
                 }
             } else if (type === 'leave') {
                 // Client explicitly leaves

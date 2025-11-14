@@ -1,15 +1,16 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { Song } from '../types';
-import { AddIcon, FolderAddIcon, ChevronDownIcon, EditIcon, CheckIcon, RemoveIcon } from './Icons';
+import { AddIcon, FolderAddIcon, ChevronDownIcon, EditIcon, CheckIcon, RemoveIcon, TrashIcon } from './Icons';
 
 interface LibraryPanelProps {
     library: Song[];
     onSongsAdded: (songs: any[]) => void;
     addToQueue: (song: Song) => void;
     onUpdateSong: (songId: string, newMetadata: { title: string; artist: string; album: string }) => void;
+    onRemoveSong: (songId: string) => void;
 }
 
-export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdded, addToQueue, onUpdateSong }) => {
+export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdded, addToQueue, onUpdateSong, onRemoveSong }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
     const [editingSongId, setEditingSongId] = useState<string | null>(null);
@@ -298,6 +299,16 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                                 className="p-2 rounded-full text-gray-400 hover:bg-indigo-600/50 hover:text-white"
                                             >
                                                 <AddIcon />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onRemoveSong(song.id);
+                                                }}
+                                                title="Remove from library"
+                                                className="p-2 rounded-full text-gray-400 hover:bg-red-600/50 hover:text-white"
+                                            >
+                                                <TrashIcon />
                                             </button>
                                         </div>
                                     </div>
