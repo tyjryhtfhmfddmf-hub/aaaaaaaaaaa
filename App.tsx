@@ -413,34 +413,9 @@ const App: React.FC = () => {
         localStorage.setItem('music_queue_index', currentSongIndex.toString());
     }, [queue, currentSongIndex, rememberQueue]);
     
-    const playSong = useCallback((index: number) => {
-        if (index >= 0 && index < queue.length && audioRef.current) {
-             const songToPlay = queue[index];
-            if (songToPlay.isRemote) {
-                if (websocketRef.current?.readyState === WebSocket.OPEN) {
-                    websocketRef.current.send(JSON.stringify({
-                        type: 'requestSongFile',
-                        payload: { songKey: getSongKey(songToPlay), requester: clientId }
-                    }));
-                    alert(`Requesting ${songToPlay.title} from the other user...`);
-                } else {
-                    alert("Not connected to a session. Cannot request song.");
-                }
-                return;
-            }
-
-            if (activeUrl) URL.revokeObjectURL(activeUrl);
-
-            const songFile = songToPlay.file;
-            const url = URL.createObjectURL(songFile as File);
-            setActiveUrl(url);
-
-            audioRef.current.src = url;
-            audioRef.current.play().catch(e => console.error("Error playing audio:", e));
-            setCurrentSongIndex(index);
-            setIsPlaying(true);
-        }
-    }, [queue, activeUrl, clientId]);
+    const playSong = (index: number) => {
+        setCurrentSongIndex(index);
+    };
 
     const handlePlayPause = useCallback(() => {
         if (isPlaying) {
@@ -805,6 +780,16 @@ const App: React.FC = () => {
                         setNetworkStatus('error');
                         ws.close();
                         break;
+                    case 'playCommand':
+                        if (!isPlaying) {
+                            handlePlayPause();
+                        }
+                        break;
+                    case 'pauseCommand':
+                        if (isPlaying) {
+                            handlePlayPause();
+                        }
+                        break;
                     default:
                         console.warn('Unknown message type received:', message.type);
                 }
@@ -828,7 +813,7 @@ const App: React.FC = () => {
             alert('Failed to connect to the network service. The service may be starting up. Please try again in a moment.');
             setNetworkStatus('error');
         };
-    }, [library, networkStatus, roomCode]);
+    }, [library, networkStatus, roomCode, isPlaying, handlePlayPause]);
 
     const handleHost = useCallback(() => {
         initWebSocket(() => {
