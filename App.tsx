@@ -175,7 +175,7 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const songToPlay = queue[currentSongIndex];
-        if (songToPlay && songToPlay.file) {
+        if (songToPlay && !songToPlay.isRemote && songToPlay.file) {
             const url = URL.createObjectURL(songToPlay.file as File);
             setActiveUrl(url);
             if (audioRef.current) {
@@ -487,6 +487,10 @@ const App: React.FC = () => {
   };
 
     const addToQueue = (song: Song) => {
+        if (song.isRemote && !song.file) {
+            console.warn("Attempted to add a remote song without a file to the queue.");
+            return;
+        }
         if (!queue.some(s => s.id === song.id)) {
             setQueue(prev => [...prev, song]);
         } else {
@@ -612,6 +616,7 @@ const App: React.FC = () => {
     const shareFullLibrary = useCallback(() => {
         if (websocketRef.current?.readyState === WebSocket.OPEN) {
             const serializableLibrary = library
+                .filter(song => !song.isRemote)
                 .map(song => {
                     const { file, ...rest } = song; // Exclude File object
                     return rest;

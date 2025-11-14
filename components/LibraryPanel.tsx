@@ -256,13 +256,13 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                             ) : (
                                 <li
                                     key={song.id}
-                                    onDoubleClick={() => addToQueue(song)}
-                                    draggable={true}
-                                    onDragStart={(e) => {
+                                    onDoubleClick={!song.isRemote ? () => addToQueue(song) : undefined}
+                                    draggable={!song.isRemote}
+                                    onDragStart={!song.isRemote ? (e) => {
                                         e.dataTransfer.setData('song-id', song.id);
                                         e.dataTransfer.effectAllowed = 'copy';
-                                    }}
-                                    className={`group flex items-center p-2 rounded-md transition-colors hover:bg-gray-700 cursor-pointer`}
+                                    } : undefined}
+                                    className={`group flex items-center p-2 rounded-md transition-colors ${song.isRemote ? 'opacity-60' : 'hover:bg-gray-700 cursor-pointer'}`}
                                 >
                                     {song.albumArt ? (
                                         <img src={song.albumArt} alt={song.album} className="w-10 h-10 rounded-md mr-3 object-cover flex-shrink-0" />
@@ -272,8 +272,8 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                        <p className="font-medium truncate text-gray-200">{song.title}</p>
-                                        <p className="text-sm truncate text-gray-400">{song.artist}</p>
+                                        <p className={`font-medium truncate ${song.isRemote ? 'text-gray-500' : 'text-gray-200'}`}>{song.title}</p>
+                                        <p className={`text-sm truncate ${song.isRemote ? 'text-gray-600' : 'text-gray-400'}`}>{song.artist}</p>
                                     </div>
                                     <div className="flex items-center ml-2 flex-shrink-0">
                                         <span className="text-sm text-gray-500 group-hover:hidden">
