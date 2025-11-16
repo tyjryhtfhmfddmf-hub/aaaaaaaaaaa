@@ -852,18 +852,21 @@ const App: React.FC = () => {
                 console.log('Received message:', message);
 
                 switch (message.type) {
-                    case 'connected':
+                    case 'connected': {
                         setClientId(message.payload.id);
                         break;
-                    case 'hosted':
+                    }
+                    case 'hosted': {
                         setIsHost(true);
                         setRoomCode(message.payload.roomCode);
                         break;
-                    case 'joined':
+                    }
+                    case 'joined': {
                         setIsHost(false);
                         setRoomCode(message.payload.roomCode);
                         break;
-                    case 'queueUpdate':
+                    }
+                    case 'queueUpdate': {
                         const receivedQueueKeys = message.payload.queue as string[];
                         const newQueue = receivedQueueKeys
                             .map(key => library.find(song => getSongKey(song) === key))
@@ -871,7 +874,8 @@ const App: React.FC = () => {
                         setQueue(newQueue);
                         alert(`Queue has been updated by a user in room ${roomCode}.`);
                         break;
-                    case 'libraryUpdate':
+                    }
+                    case 'libraryUpdate': {
                         const remoteLibraryUpdate = message.payload.library as Omit<Song, 'file'>[];
                         setRemoteLibrary(remoteLibraryUpdate.map(song => ({ ...song, isRemote: true })));
                         setLibrary(prevLibrary => {
@@ -890,15 +894,18 @@ const App: React.FC = () => {
                             return prevLibrary;
                         });
                         break;
-                    case 'requestLibraryShare':
+                    }
+                    case 'requestLibraryShare': {
                         shareFullLibrary();
                         break;
-                    case 'playlistUpdate':
+                    }
+                    case 'playlistUpdate': {
                         const { playlist } = message.payload;
                         alert(`Playlist "${playlist.name}" has been shared by a user in room ${roomCode}.`);
                         // Further implementation would involve adding this playlist to the client's playlists state
                         break;
-                    case 'requestSongFile':
+                    }
+                    case 'requestSongFile': {
                         const { songKey, requester } = message.payload;
                         const songToSend = library.find(song => getSongKey(song) === songKey);
                         if (songToSend && songToSend.file) {
@@ -945,7 +952,8 @@ const App: React.FC = () => {
                             }));
                         }
                         break;
-                    case 'webrtcOffer':
+                    }
+                    case 'webrtcOffer': {
                         const { offer, sender: offererId } = message.payload;
                         const pcForOffer = getPeerConnection(offererId, clientId!);
                         await pcForOffer.setRemoteDescription(new RTCSessionDescription(offer));
@@ -956,24 +964,28 @@ const App: React.FC = () => {
                             payload: { target: offererId, answer }
                         }));
                         break;
-                    case 'webrtcAnswer':
+                    }
+                    case 'webrtcAnswer': {
                         const { answer, sender: answererId } = message.payload;
                         const pcForAnswer = peerConnections.current[answererId];
                         if (pcForAnswer) {
                             await pcForAnswer.setRemoteDescription(new RTCSessionDescription(answer));
                         }
                         break;
-                    case 'iceCandidate':
+                    }
+                    case 'iceCandidate': {
                         const { candidate, sender: candidateSenderId } = message.payload;
                         const pcForCandidate = peerConnections.current[candidateSenderId];
                         if (pcForCandidate && candidate) {
                             await pcForCandidate.addIceCandidate(new RTCIceCandidate(candidate));
                         }
                         break;
-                    case 'left':
+                    }
+                    case 'left': {
                         ws.close();
                         break;
-                    case 'error':
+                    }
+                    case 'error': {
                         const errorMessage = message.payload.message;
                         const alertMessage = typeof errorMessage === 'string'
                             ? errorMessage
@@ -982,18 +994,22 @@ const App: React.FC = () => {
                         setNetworkStatus('error');
                         ws.close();
                         break;
-                    case 'playCommand':
+                    }
+                    case 'playCommand': {
                         if (!isPlaying) {
                             handlePlayPause();
                         }
                         break;
-                    case 'pauseCommand':
+                    }
+                    case 'pauseCommand': {
                         if (isPlaying) {
                             handlePlayPause();
                         }
                         break;
-                    default:
+                    }
+                    default: {
                         console.warn('Unknown message type received:', message.type);
+                    }
                 }
             } catch (e) {
                 console.error('Error parsing message from server:', e);
