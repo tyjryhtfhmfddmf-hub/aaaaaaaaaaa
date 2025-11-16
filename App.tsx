@@ -156,6 +156,8 @@ const App: React.FC = () => {
     const [isHost, setIsHost] = useState<boolean>(false);
     const [clientId, setClientId] = useState<number | null>(null);
     const websocketRef = useRef<WebSocket | null>(null);
+    const [outgoingFileChunks, setOutgoingFileChunks] = useState<Record<string, ArrayBuffer[]>>({});
+    const downloadTimers = useRef<Record<string, number>>({});
     // FIX: The return type of `setInterval` in a browser environment is a `number`, not `NodeJS.Timeout`.
     const syncIntervalRef = useRef<number | null>(null);
 
@@ -731,45 +733,88 @@ const App: React.FC = () => {
                         if (songToSend && songToSend.file) {
                             const reader = new FileReader();
                             reader.onload = (e) => {
-                                const arrayBuffer = e.target.result;
+                                const arrayBuffer = e.target.result as ArrayBuffer;
                                 const chunkSize = 16384; // 16KB
                                 const totalChunks = Math.ceil(arrayBuffer.byteLength / chunkSize);
+                                
+                                const chunks: ArrayBuffer[] = [];
                                 for (let i = 0; i < totalChunks; i++) {
-                                    const chunk = arrayBuffer.slice(i * chunkSize, (i + 1) * chunkSize);
+                                    chunks.push(arrayBuffer.slice(i * chunkSize, (i + 1) * chunkSize));
+                                }
+
+                                setOutgoingFileChunks(prev => ({ ...prev, [songKey]: chunks }));
+
+                                chunks.forEach((chunk, i) => {
                                     websocketRef.current?.send(JSON.stringify({
                                         type: 'songFileChunk',
                                         payload: {
                                             songKey,
-                                            chunk: Array.from(new Uint8Array(chunk as ArrayBuffer)),
+                                            chunk: Array.from(new Uint8Array(chunk)),
                                             chunkIndex: i,
                                             totalChunks,
                                             requester
                                         }
                                     }));
-                                }
+                                });
                             };
                             reader.readAsArrayBuffer(songToSend.file);
                         }
                         break;
+                    case 'requestMissingFileChunks':
+                        const { songKey: missingSongKey, missingIndices, requester: missingRequester } = message.payload;
+                        const cachedChunks = outgoingFileChunks[missingSongKey];
+                        if (cachedChunks) {
+                            console.log(`Resending ${missingIndices.length} missing chunks for ${missingSongKey}`);
+                            missingIndices.forEach((index: number) => {
+                                const chunk = cachedChunks[index];
+                                if (chunk) {
+                                    websocketRef.current?.send(JSON.stringify({
+                                        type: 'songFileChunk',
+                                        payload: {
+                                            songKey: missingSongKey,
+                                            chunk: Array.from(new Uint8Array(chunk)),
+                                            chunkIndex: index,
+                                            totalChunks: cachedChunks.length,
+                                            requester: missingRequester
+                                        }
+                                    }));
+                                }
+                            });
+                        }
+                        break;
                     case 'songFileChunk':
                         const { songKey: chunkSongKey, chunk, chunkIndex, totalChunks } = message.payload;
-                        setFileChunks(prev => {
-                            const newChunks = { ...prev };
-                            if (!newChunks[chunkSongKey]) {
-                                newChunks[chunkSongKey] = { chunks: [], received: 0, total: totalChunks };
-                            }
-                            newChunks[chunkSongKey].chunks[chunkIndex] = chunk;
-                            newChunks[chunkSongKey].received++;
 
-                            if (newChunks[chunkSongKey].received === newChunks[chunkSongKey].total) {
+                        if (downloadTimers.current[chunkSongKey]) {
+                            clearTimeout(downloadTimers.current[chunkSongKey]);
+                        }
+
+                        setFileChunks(prev => {
+                            const newChunksState = { ...prev };
+                            if (!newChunksState[chunkSongKey]) {
+                                newChunksState[chunkSongKey] = { chunks: [], received: 0, total: totalChunks };
+                            }
+
+                            if (!newChunksState[chunkSongKey].chunks[chunkIndex]) {
+                                newChunksState[chunkSongKey].chunks[chunkIndex] = chunk;
+                                newChunksState[chunkSongKey].received++;
+                            }
+                            
+                            const currentDownload = newChunksState[chunkSongKey];
+
+                            if (currentDownload.received === currentDownload.total) {
+                                if (downloadTimers.current[chunkSongKey]) {
+                                    clearTimeout(downloadTimers.current[chunkSongKey]);
+                                    delete downloadTimers.current[chunkSongKey];
+                                }
+                                
                                 const receivedSong = library.find(s => getSongKey(s) === chunkSongKey);
                                 if (receivedSong) {
-                                    const fileBlob = new Blob(newChunks[chunkSongKey].chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' });
+                                    const fileBlob = new Blob(currentDownload.chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' });
                                     const newFile = new File([fileBlob], `${receivedSong.title}.mp3`, { type: fileBlob.type });
                                     
                                     const reader = new FileReader();
                                     reader.onload = async (event) => {
-                                        const arrayBuffer = event.target.result;
                                         const jsmediatags = (window as any).jsmediatags;
 
                                         let albumArt = receivedSong.albumArt;
@@ -793,10 +838,8 @@ const App: React.FC = () => {
                                             albumArt: albumArt
                                         };
 
-                                        // Update the song in IndexedDB
                                         updateSongInDB(receivedSong.id, { file: newFile, isRemote: false, albumArt: albumArt ? new Blob([await fetch(albumArt).then(r => r.arrayBuffer())]) : undefined });
 
-                                        // Update state
                                         setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
                                         setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
 
@@ -804,11 +847,30 @@ const App: React.FC = () => {
                                     };
                                     reader.readAsArrayBuffer(fileBlob);
                                     
-                                    // Clean up
-                                    delete newChunks[chunkSongKey];
+                                    delete newChunksState[chunkSongKey];
                                 }
+                            } else {
+                                downloadTimers.current[chunkSongKey] = window.setTimeout(() => {
+                                    const missingIndices: number[] = [];
+                                    for (let i = 0; i < currentDownload.total; i++) {
+                                        if (!currentDownload.chunks[i]) {
+                                            missingIndices.push(i);
+                                        }
+                                    }
+
+                                    if (missingIndices.length > 0) {
+                                        console.log(`Requesting ${missingIndices.length} missing chunks for ${chunkSongKey}`);
+                                        websocketRef.current?.send(JSON.stringify({
+                                            type: 'requestMissingFileChunks',
+                                            payload: {
+                                                songKey: chunkSongKey,
+                                                missingIndices,
+                                            }
+                                        }));
+                                    }
+                                }, 5000); // 5-second timeout
                             }
-                            return newChunks;
+                            return newChunksState;
                         });
                         break;
                     case 'left':
@@ -856,7 +918,7 @@ const App: React.FC = () => {
             alert('Failed to connect to the network service. The service may be starting up. Please try again in a moment.');
             setNetworkStatus('error');
         };
-    }, [library, networkStatus, roomCode, isPlaying, handlePlayPause]);
+    }, [library, networkStatus, roomCode, isPlaying, handlePlayPause, outgoingFileChunks]);
 
     const handleHost = useCallback(() => {
         initWebSocket(() => {
@@ -928,6 +990,7 @@ const App: React.FC = () => {
         }
     }, []);
 
+.
     const handleCompareLibrariesButtonClick = useCallback(() => {
         if (remoteLibrary.length > 0) {
             handleCompareLibraries(remoteLibrary);
