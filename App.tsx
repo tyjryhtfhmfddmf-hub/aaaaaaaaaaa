@@ -990,7 +990,6 @@ const App: React.FC = () => {
         }
     }, []);
 
-.
     const handleCompareLibrariesButtonClick = useCallback(() => {
         if (remoteLibrary.length > 0) {
             handleCompareLibraries(remoteLibrary);
