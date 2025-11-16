@@ -174,7 +174,9 @@ const App: React.FC = () => {
     }, [library]);
 
     const handleDataChannelMessage = useCallback((event: MessageEvent) => {
+        console.log('handleDataChannelMessage called.');
         const message = JSON.parse(event.data);
+        console.log(`Received message type: ${message.type}`);
         if (message.type === 'songFileChunk') {
             const { songKey: chunkSongKey, chunk, chunkIndex, totalChunks } = message.payload;
 
@@ -929,6 +931,7 @@ const App: React.FC = () => {
                                     console.log('Data channel opened, preparing to send file...');
                                     const reader = new FileReader();
                                     reader.onload = (e) => {
+                                        console.log('FileReader onload started.');
                                         const arrayBuffer = e.target.result as ArrayBuffer;
                                         const chunkSize = 16384;
                                         const totalChunks = Math.ceil(arrayBuffer.byteLength / chunkSize);
@@ -938,9 +941,11 @@ const App: React.FC = () => {
                                         }
                                         setOutgoingFileChunks(prev => ({ ...prev, [songKey]: chunks }));
                                         let i = 0;
+                                        console.log('Starting to send chunks...');
                                         function sendChunk() {
                                             if (i >= chunks.length) return;
                                             if (dc.readyState === 'open') {
+                                                console.log(`Sending chunk ${i} for ${songKey}`);
                                                 dc.send(JSON.stringify({
                                                     type: 'songFileChunk',
                                                     payload: {
@@ -952,6 +957,8 @@ const App: React.FC = () => {
                                                 }));
                                                 i++;
                                                 setTimeout(sendChunk, 10);
+                                            } else {
+                                                console.warn(`Data channel not open, stopping send for ${songKey}`);
                                             }
                                         }
                                         sendChunk();
