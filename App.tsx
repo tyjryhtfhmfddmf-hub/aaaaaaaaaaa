@@ -904,21 +904,23 @@ const App: React.FC = () => {
                     case 'libraryUpdate': {
                         const remoteLibraryUpdate = message.payload.library as Omit<Song, 'file'>[];
                         setRemoteLibrary(remoteLibraryUpdate.map(song => ({ ...song, isRemote: true })));
-                        setLibrary(prevLibrary => {
-                            const currentLibraryIds = new Set(prevLibrary.map(s => s.id));
-                            const newSongs = remoteLibraryUpdate
-                                .filter(remoteSong => !currentLibraryIds.has(remoteSong.id))
-                                .map(remoteSong => ({
-                                    ...remoteSong,
-                                    isRemote: true,
-                                }));
-                            
-                            if (newSongs.length > 0) {
-                                console.log(`Merging ${newSongs.length} new songs from network.`);
-                                return [...prevLibrary, ...newSongs];
-                            }
-                            return prevLibrary;
-                        });
+                        
+                        const newSongs = remoteLibraryUpdate
+                            .filter(remoteSong => !libraryRef.current.some(localSong => localSong.id === remoteSong.id))
+                            .map(remoteSong => ({
+                                ...remoteSong,
+                                isRemote: true,
+                            }));
+
+                        if (newSongs.length > 0) {
+                            console.log(`Merging ${newSongs.length} new songs from network.`);
+                            addSongsToDB(newSongs).then(() => {
+                                console.log('Successfully added remote songs to the database.');
+                                setLibrary(prevLibrary => [...prevLibrary, ...newSongs]);
+                            }).catch(error => {
+                                console.error('Failed to add remote songs to the database:', error);
+                            });
+                        }
                         break;
                     }
                     case 'requestLibraryShare': {
