@@ -966,6 +966,7 @@ const App: React.FC = () => {
                             }
                         } catch (error) {
                             console.error('Error handling requestSongFile and creating offer:', error);
+                            alert(`Error creating download offer: ${error}`);
                         }
                         break;
                     }
@@ -991,6 +992,7 @@ const App: React.FC = () => {
                             }));
                         } catch (error) {
                             console.error("Error handling WebRTC offer:", error);
+                            alert(`Error handling download offer: ${error}`);
                         }
                         break;
                     }
