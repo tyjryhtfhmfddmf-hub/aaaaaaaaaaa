@@ -838,7 +838,7 @@ const App: React.FC = () => {
                                             albumArt: albumArt
                                         };
 
-                                        updateSongInDB(receivedSong.id, { file: newFile, isRemote: false, albumArt: albumArt ? new Blob([await fetch(albumArt).then(r => r.arrayBuffer())]) : undefined });
+                                        await updateSongInDB(receivedSong.id, { file: newFile, isRemote: false, albumArt: albumArt ? new Blob([await fetch(albumArt).then(r => r.arrayBuffer())]) : undefined });
 
                                         setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
                                         setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
