@@ -251,6 +251,14 @@ const App: React.FC = () => {
             iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
         });
 
+        pc.onconnectionstatechange = (event) => {
+            console.log(`Peer connection state for peer ${peerId} changed to: ${pc.connectionState}`);
+        };
+
+        pc.onsignalingstatechange = (event) => {
+            console.log(`Signaling state for peer ${peerId} changed to: ${pc.signalingState}`);
+        };
+
         pc.onicecandidate = (event) => {
             if (event.candidate && websocketRef.current?.readyState === WebSocket.OPEN) {
                 websocketRef.current.send(JSON.stringify({
