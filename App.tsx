@@ -496,7 +496,7 @@ const App: React.FC = () => {
                  const g = parseInt(hexValue.substring(2, 4), 16);
                  const b = parseInt(hexValue.substring(4, 6), 16);
                  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-            } catch (e) => {
+            } catch (e) {
                 return `rgba(79, 70, 229, ${alpha})`; // Fallback
             }
         };
