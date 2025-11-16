@@ -143,7 +143,7 @@ const App: React.FC = () => {
     const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
     const [comparisonData, setComparisonData] = useState<ComparisonData | null>(null);
     const [remoteLibrary, setRemoteLibrary] = useState<Song[]>([]);
-    const [fileChunks, setFileChunks] = useState<Record<string, { chunks: any[], received: number, total: number }>>({});
+    const [downloadProgress, setDownloadProgress] = useState<Record<string, { received: number, total: number }>>({});
     const [activeCustomColors, setActiveCustomColors] = useState<CustomPalette['colors']>({
         primary: '#4F46E5',
         accent: '#34D399',
@@ -168,54 +168,35 @@ const App: React.FC = () => {
     const [activeUrl, setActiveUrl] = useState<string | null>(null);
     const footerRef = useRef<HTMLElement>(null);
     const libraryRef = useRef<Song[]>(library);
-    const chunkQueue = useRef<any[]>([]);
-    const chunkUpdateTimer = useRef<number | null>(null);
+    const chunkData = useRef<Record<string, any[]>>({});
 
     useEffect(() => {
         libraryRef.current = library;
     }, [library]);
 
-    const applyChunkUpdates = useCallback(() => {
-        if (chunkQueue.current.length === 0) {
-            chunkUpdateTimer.current = null;
-            return;
-        }
-
-        const updatesToProcess = [...chunkQueue.current];
-        chunkQueue.current = [];
-
-        setFileChunks(prev => {
-            const newChunksState = { ...prev };
-
-            for (const payload of updatesToProcess) {
-                const { songKey: chunkSongKey, chunk, chunkIndex, totalChunks } = payload;
-                
-                if (newChunksState[chunkSongKey]?.received === newChunksState[chunkSongKey]?.total) continue;
-
-                if (!newChunksState[chunkSongKey]) {
-                    newChunksState[chunkSongKey] = { chunks: [], received: 0, total: totalChunks };
-                }
-                if (!newChunksState[chunkSongKey].chunks[chunkIndex]) {
-                    newChunksState[chunkSongKey].chunks[chunkIndex] = chunk;
-                    newChunksState[chunkSongKey].received++;
-                    console.log(`Updating fileChunks for ${chunkSongKey}, received: ${newChunksState[chunkSongKey].received}/${newChunksState[chunkSongKey].total}`);
-                }
-            }
-            return newChunksState;
-        });
-
-        chunkUpdateTimer.current = null;
-    }, []);
-
     const handleDataChannelMessage = useCallback((event: MessageEvent) => {
-        console.log('handleDataChannelMessage called.');
         const message = JSON.parse(event.data);
-        console.log(`Received message type: ${message.type}`);
 
         if (message.type === 'songFileChunk') {
-            chunkQueue.current.push(message.payload);
-            if (chunkUpdateTimer.current === null) {
-                chunkUpdateTimer.current = window.setTimeout(applyChunkUpdates, 100);
+            const { songKey, chunk, chunkIndex, totalChunks } = message.payload;
+
+            if (!chunkData.current[songKey]) {
+                chunkData.current[songKey] = [];
+            }
+
+            // Store chunk data in ref, and update progress state
+            if (!chunkData.current[songKey][chunkIndex]) {
+                chunkData.current[songKey][chunkIndex] = chunk;
+
+                setDownloadProgress(prev => {
+                    const newProgress = { ...prev };
+                    if (!newProgress[songKey]) {
+                        newProgress[songKey] = { received: 0, total: totalChunks };
+                    }
+                    newProgress[songKey].received++;
+                    console.log(`Download progress for ${songKey}: ${newProgress[songKey].received}/${newProgress[songKey].total}`);
+                    return newProgress;
+                });
             }
         } else if (message.type === 'requestMissingFileChunks') {
              const { songKey: missingSongKey, missingIndices } = message.payload;
@@ -239,7 +220,7 @@ const App: React.FC = () => {
                  });
              }
         }
-    }, [outgoingFileChunks, applyChunkUpdates]);
+    }, [outgoingFileChunks]);
 
     const getPeerConnection = useCallback((peerId: number, senderId: number) => {
         if (peerConnections.current[peerId]) {
@@ -277,90 +258,95 @@ const App: React.FC = () => {
             console.log(`Received data channel from ${peerId}`);
             dataChannels.current[peerId] = channel;
             channel.onmessage = handleDataChannelMessage;
+            channel.onclose = () => console.log(`Data channel from peer ${peerId} closed.`);
+            channel.onerror = (error) => console.error(`Data channel error from peer ${peerId}:`, error);
         };
         
         peerConnections.current[peerId] = pc;
         return pc;
     }, [handleDataChannelMessage]);
 
-    const processDownloadedFile = useCallback(async (songKey: string, chunks: any[]) => {
+    const processDownloadedFile = useCallback(async (songKey: string) => {
+        const chunks = chunkData.current[songKey];
+        if (!chunks) {
+            console.error(`Could not find chunk data for completed download: ${songKey}`);
+            return;
+        }
+
         const receivedSong = library.find(s => getSongKey(s) === songKey);
 
         if (!receivedSong) {
             console.error(`Downloaded song with key "${songKey}" not found in the library.`);
             alert(`Error: Could not find song for downloaded file "${songKey}". The download cannot be completed.`);
-            setFileChunks(prev => {
-                const newState = { ...prev };
-                delete newState[songKey];
-                return newState;
-            });
-            return;
-        }
-
-        try {
-            const fileBlob = new Blob(chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' });
-            const newFile = new File([fileBlob], `${receivedSong.title}.mp3`, { type: fileBlob.type });
-
-            const jsmediatags = (window as any).jsmediatags;
-            let albumArt = receivedSong.albumArt;
+        } else {
             try {
-                const tags: any = await new Promise((resolve, reject) => {
-                    jsmediatags.read(newFile, { onSuccess: resolve, onError: reject });
-                });
-                const { picture } = tags.tags;
-                if (picture) {
-                    const artBlob = new Blob([new Uint8Array(picture.data)], { type: picture.format });
-                    albumArt = await blobToDataURL(artBlob);
+                const fileBlob = new Blob(chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' });
+                const newFile = new File([fileBlob], `${receivedSong.title}.mp3`, { type: fileBlob.type });
+
+                const jsmediatags = (window as any).jsmediatags;
+                let albumArt = receivedSong.albumArt;
+                try {
+                    const tags: any = await new Promise((resolve, reject) => {
+                        jsmediatags.read(newFile, { onSuccess: resolve, onError: reject });
+                    });
+                    const { picture } = tags.tags;
+                    if (picture) {
+                        const artBlob = new Blob([new Uint8Array(picture.data)], { type: picture.format });
+                        albumArt = await blobToDataURL(artBlob);
+                    }
+                } catch (error) {
+                    console.error("Error reading tags from downloaded file, preserving old album art.", error);
                 }
+
+                const updatedSong = {
+                    ...receivedSong,
+                    file: newFile,
+                    isRemote: false,
+                    albumArt: albumArt
+                };
+
+                await updateSongInDB(receivedSong.id, { file: newFile, isRemote: false, albumArt: albumArt ? new Blob([await fetch(albumArt).then(r => r.arrayBuffer())]) : undefined });
+
+                setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
+                setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
+
+                alert(`${receivedSong.title} has been downloaded!`);
+
             } catch (error) {
-                console.error("Error reading tags from downloaded file, preserving old album art.", error);
+                console.error("Failed to process or save downloaded song:", error);
+                alert(`An error occurred while finalizing the download for "${receivedSong.title}". Please try again.`);
             }
-
-            const updatedSong = {
-                ...receivedSong,
-                file: newFile,
-                isRemote: false,
-                albumArt: albumArt
-            };
-
-            await updateSongInDB(receivedSong.id, { file: newFile, isRemote: false, albumArt: albumArt ? new Blob([await fetch(albumArt).then(r => r.arrayBuffer())]) : undefined });
-
-            setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
-            setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
-
-            alert(`${receivedSong.title} has been downloaded!`);
-
-        } catch (error) {
-            console.error("Failed to process or save downloaded song:", error);
-            alert(`An error occurred while finalizing the download for "${receivedSong.title}". Please try again.`);
-        } finally {
-            // Clean up the completed download from the state
-            setFileChunks(prev => {
-                const newState = { ...prev };
-                delete newState[songKey];
-                return newState;
-            });
         }
+
+        // Clean up the completed download from the state and refs
+        delete chunkData.current[songKey];
+        setDownloadProgress(prev => {
+            const newState = { ...prev };
+            delete newState[songKey];
+            return newState;
+        });
     }, [library]);
 
     useEffect(() => {
-        for (const songKey in fileChunks) {
-            const download = fileChunks[songKey];
+        for (const songKey in downloadProgress) {
+            const download = downloadProgress[songKey];
             if (download) {
                 // Clear any existing timer for this download
                 if (downloadTimers.current[songKey]) {
                     clearTimeout(downloadTimers.current[songKey]);
                 }
 
-                if (download.received === download.total && download.chunks.length === download.total) {
+                if (download.received === download.total) {
                     // All chunks are here. Process the file.
-                    processDownloadedFile(songKey, download.chunks);
+                    console.log(`Download complete for ${songKey}. Processing file...`);
+                    processDownloadedFile(songKey);
                 } else {
                     // Download is incomplete, set a timer to check for missing chunks
                     downloadTimers.current[songKey] = window.setTimeout(() => {
+                        const currentChunks = chunkData.current[songKey] || [];
                         const missingIndices: number[] = [];
                         for (let i = 0; i < download.total; i++) {
-                            if (!download.chunks[i]) {
+                            if (!currentChunks[i]) {
                                 missingIndices.push(i);
                             }
                         }
@@ -380,7 +366,7 @@ const App: React.FC = () => {
                 }
             }
         }
-    }, [fileChunks, processDownloadedFile]);
+    }, [downloadProgress, processDownloadedFile]);
 
     const blobToDataURL = (blob: Blob): Promise<string> => {
         return new Promise((resolve, reject) => {
@@ -510,7 +496,7 @@ const App: React.FC = () => {
                  const g = parseInt(hexValue.substring(2, 4), 16);
                  const b = parseInt(hexValue.substring(4, 6), 16);
                  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-            } catch (e) {
+            } catch (e) => {
                 return `rgba(79, 70, 229, ${alpha})`; // Fallback
             }
         };
@@ -1242,7 +1228,7 @@ const App: React.FC = () => {
                         onUpdateSong={handleUpdateSongMetadata}
                         onRemoveSong={handleRemoveSongFromLibrary}
                         onDownloadSong={handleDownloadSong}
-                        fileChunks={fileChunks}
+                        downloadProgress={downloadProgress}
                     />
                     <NetworkPanel
                         status={networkStatus}

@@ -10,10 +10,10 @@ interface LibraryPanelProps {
     onUpdateSong: (songId: string, newMetadata: { title: string; artist: string; album: string }) => void;
     onRemoveSong: (songId: string) => void;
     onDownloadSong: (songId: string) => void;
-    fileChunks: Record<string, { received: number; total: number }>;
+    downloadProgress: Record<string, { received: number; total: number }>;
 }
 
-export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdded, addToQueue, onUpdateSong, onRemoveSong, onDownloadSong, fileChunks }) => {
+export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdded, addToQueue, onUpdateSong, onRemoveSong, onDownloadSong, downloadProgress }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
     const [editingSongId, setEditingSongId] = useState<string | null>(null);
@@ -225,7 +225,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                     <ul className="space-y-1">
                         {filteredLibrary.map(song => {
                             const songKey = getSongKey(song);
-                            const download = fileChunks[songKey];
+                            const download = downloadProgress[songKey];
                             const progress = download ? (download.received / download.total) * 100 : 0;
 
                             return editingSongId === song.id ? (
