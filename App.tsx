@@ -163,6 +163,11 @@ const App: React.FC = () => {
     const originalQueueBeforeShuffle = useRef<Song[]>([]);
     const [activeUrl, setActiveUrl] = useState<string | null>(null);
     const footerRef = useRef<HTMLElement>(null);
+    const libraryRef = useRef<Song[]>(library);
+
+    useEffect(() => {
+        libraryRef.current = library;
+    }, [library]);
 
     const blobToDataURL = (blob: Blob): Promise<string> => {
         return new Promise((resolve, reject) => {
@@ -172,6 +177,21 @@ const App: React.FC = () => {
             reader.readAsDataURL(blob);
         });
     };
+
+    const handleDownloadSong = useCallback((songId: string) => {
+        const songToDownload = libraryRef.current.find(s => s.id === songId);
+        if (songToDownload && songToDownload.isRemote) {
+            if (websocketRef.current?.readyState === WebSocket.OPEN) {
+                websocketRef.current.send(JSON.stringify({
+                    type: 'requestSongFile',
+                    payload: { songKey: getSongKey(songToDownload) }
+                }));
+                alert(`Requesting "${songToDownload.title}"...`);
+            } else {
+                alert('Not connected to a session. Cannot download songs.');
+            }
+        }
+    }, []);
 
     useEffect(() => {
         const songToPlay = queue[currentSongIndex];
@@ -590,21 +610,6 @@ const App: React.FC = () => {
         setPlaylists(newPlaylists);
         localStorage.setItem('music_playlists', JSON.stringify(newPlaylists));
     };
-
-    const handleDownloadSong = useCallback((songId: string) => {
-        const songToDownload = library.find(s => s.id === songId);
-        if (songToDownload && songToDownload.isRemote) {
-            if (websocketRef.current?.readyState === WebSocket.OPEN) {
-                websocketRef.current.send(JSON.stringify({
-                    type: 'requestSongFile',
-                    payload: { songKey: getSongKey(songToDownload) }
-                }));
-                alert(`Requesting "${songToDownload.title}"...`);
-            } else {
-                alert('Not connected to a session. Cannot download songs.');
-            }
-        }
-    }, [library]);
 
     const clearQueue = useCallback(() => {
         setQueue([]);
