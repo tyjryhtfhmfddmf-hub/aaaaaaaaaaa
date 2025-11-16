@@ -906,63 +906,92 @@ const App: React.FC = () => {
                         break;
                     }
                     case 'requestSongFile': {
-                        const { songKey, requester } = message.payload;
-                        const songToSend = library.find(song => getSongKey(song) === songKey);
-                        if (songToSend && songToSend.file) {
-                            const pc = getPeerConnection(requester, clientId!);
-                            const dc = pc.createDataChannel(songKey);
-                            dataChannels.current[requester] = dc;
-                            dc.onopen = () => {
-                                const reader = new FileReader();
-                                reader.onload = (e) => {
-                                    const arrayBuffer = e.target.result as ArrayBuffer;
-                                    const chunkSize = 16384;
-                                    const totalChunks = Math.ceil(arrayBuffer.byteLength / chunkSize);
-                                    const chunks: ArrayBuffer[] = [];
-                                    for (let i = 0; i < totalChunks; i++) {
-                                        chunks.push(arrayBuffer.slice(i * chunkSize, (i + 1) * chunkSize));
-                                    }
-                                    setOutgoingFileChunks(prev => ({ ...prev, [songKey]: chunks }));
-                                    let i = 0;
-                                    function sendChunk() {
-                                        if (i >= chunks.length) return;
-                                        if (dc.readyState === 'open') {
-                                            dc.send(JSON.stringify({
-                                                type: 'songFileChunk',
-                                                payload: {
-                                                    songKey,
-                                                    chunk: Array.from(new Uint8Array(chunks[i])),
-                                                    chunkIndex: i,
-                                                    totalChunks,
-                                                }
-                                            }));
-                                            i++;
-                                            setTimeout(sendChunk, 10);
+                        try {
+                            console.log('Received requestSongFile, initiating WebRTC...');
+                            const { songKey, requester } = message.payload;
+                            const songToSend = library.find(song => getSongKey(song) === songKey);
+                            if (songToSend && songToSend.file) {
+                                const pc = getPeerConnection(requester, clientId!);
+                                const dc = pc.createDataChannel(songKey);
+                                console.log('Created data channel');
+                                dataChannels.current[requester] = dc;
+                                dc.onopen = () => {
+                                    console.log('Data channel opened, preparing to send file...');
+                                    const reader = new FileReader();
+                                    reader.onload = (e) => {
+                                        const arrayBuffer = e.target.result as ArrayBuffer;
+                                        const chunkSize = 16384;
+                                        const totalChunks = Math.ceil(arrayBuffer.byteLength / chunkSize);
+                                        const chunks: ArrayBuffer[] = [];
+                                        for (let i = 0; i < totalChunks; i++) {
+                                            chunks.push(arrayBuffer.slice(i * chunkSize, (i + 1) * chunkSize));
                                         }
-                                    }
-                                    sendChunk();
+                                        setOutgoingFileChunks(prev => ({ ...prev, [songKey]: chunks }));
+                                        let i = 0;
+                                        function sendChunk() {
+                                            if (i >= chunks.length) return;
+                                            if (dc.readyState === 'open') {
+                                                dc.send(JSON.stringify({
+                                                    type: 'songFileChunk',
+                                                    payload: {
+                                                        songKey,
+                                                        chunk: Array.from(new Uint8Array(chunks[i])),
+                                                        chunkIndex: i,
+                                                        totalChunks,
+                                                    }
+                                                }));
+                                                i++;
+                                                setTimeout(sendChunk, 10);
+                                            }
+                                        }
+                                        sendChunk();
+                                    };
+                                    reader.readAsArrayBuffer(songToSend.file!);
                                 };
-                                reader.readAsArrayBuffer(songToSend.file!);
-                            };
-                            const offer = await pc.createOffer();
-                            await pc.setLocalDescription(offer);
-                            websocketRef.current?.send(JSON.stringify({
-                                type: 'webrtcOffer',
-                                payload: { target: requester, offer }
-                            }));
+                                dc.onclose = () => {
+                                    console.log(`Data channel to ${requester} closed.`);
+                                };
+                                
+                                console.log('Creating WebRTC offer...');
+                                const offer = await pc.createOffer();
+                                
+                                console.log('Setting local description...');
+                                await pc.setLocalDescription(offer);
+                                
+                                console.log('Sending WebRTC offer...');
+                                websocketRef.current?.send(JSON.stringify({
+                                    type: 'webrtcOffer',
+                                    payload: { target: requester, offer }
+                                }));
+                            }
+                        } catch (error) {
+                            console.error('Error handling requestSongFile and creating offer:', error);
                         }
                         break;
                     }
                     case 'webrtcOffer': {
-                        const { offer, sender: offererId } = message.payload;
-                        const pcForOffer = getPeerConnection(offererId, clientId!);
-                        await pcForOffer.setRemoteDescription(new RTCSessionDescription(offer));
-                        const answer = await pcForOffer.createAnswer();
-                        await pcForOffer.setLocalDescription(answer);
-                        websocketRef.current?.send(JSON.stringify({
-                            type: 'webrtcAnswer',
-                            payload: { target: offererId, answer }
-                        }));
+                        try {
+                            console.log('Received WebRTC offer...');
+                            const { offer, sender: offererId } = message.payload;
+                            const pcForOffer = getPeerConnection(offererId, clientId!);
+                            
+                            console.log('Setting remote description...');
+                            await pcForOffer.setRemoteDescription(new RTCSessionDescription(offer));
+                            
+                            console.log('Creating answer...');
+                            const answer = await pcForOffer.createAnswer();
+                            
+                            console.log('Setting local description...');
+                            await pcForOffer.setLocalDescription(answer);
+                            
+                            console.log('Sending answer...');
+                            websocketRef.current?.send(JSON.stringify({
+                                type: 'webrtcAnswer',
+                                payload: { target: offererId, answer }
+                            }));
+                        } catch (error) {
+                            console.error("Error handling WebRTC offer:", error);
+                        }
                         break;
                     }
                     case 'webrtcAnswer': {
