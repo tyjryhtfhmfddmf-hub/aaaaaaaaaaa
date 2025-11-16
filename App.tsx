@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 import { PlayerControls } from './components/PlayerControls';
@@ -640,7 +639,12 @@ const App: React.FC = () => {
         setCurrentSongIndex(index);
     };
 
-    const handlePlayPause = useCallback(() => {
+    const handlePlayPause = useCallback((options?: { isNetwork?: boolean }) => {
+        if (!options?.isNetwork && websocketRef.current?.readyState === WebSocket.OPEN) {
+            const command = isPlaying ? 'pauseCommand' : 'playCommand';
+            websocketRef.current.send(JSON.stringify({ type: command }));
+        }
+
         if (isPlaying) {
             audioRef.current?.pause();
             setIsPlaying(false);
@@ -654,13 +658,19 @@ const App: React.FC = () => {
         }
     }, [isPlaying, currentSongIndex, queue, playSong]);
 
-    const handleNext = useCallback(() => {
+    const handleNext = useCallback((options?: { isNetwork?: boolean }) => {
+        if (!options?.isNetwork && websocketRef.current?.readyState === WebSocket.OPEN) {
+            websocketRef.current.send(JSON.stringify({ type: 'nextCommand' }));
+        }
         if (queue.length === 0) return;
         const nextIndex = (currentSongIndex + 1) % queue.length;
         playSong(nextIndex);
     }, [currentSongIndex, queue, playSong]);
 
-    const handlePrev = useCallback(() => {
+    const handlePrev = useCallback((options?: { isNetwork?: boolean }) => {
+        if (!options?.isNetwork && websocketRef.current?.readyState === WebSocket.OPEN) {
+            websocketRef.current.send(JSON.stringify({ type: 'prevCommand' }));
+        }
         if (queue.length === 0) return;
         const prevIndex = (currentSongIndex - 1 + queue.length) % queue.length;
         playSong(prevIndex);
@@ -685,29 +695,42 @@ const App: React.FC = () => {
         if (audioRef.current) audioRef.current.muted = newMutedState;
     };
     
-    const toggleShuffle = () => {
-      const newShuffleState = !shuffle;
-      setShuffle(newShuffleState);
-  
-      if (newShuffleState) {
-          originalQueueBeforeShuffle.current = [...queue];
-          const currentSong = queue[currentSongIndex];
-          const restOfQueue = queue.filter((_, i) => i !== currentSongIndex);
-          for (let i = restOfQueue.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [restOfQueue[i], restOfQueue[j]] = [restOfQueue[j], restOfQueue[i]];
-          }
-          const newQueue = currentSong ? [currentSong, ...restOfQueue] : restOfQueue;
-          setQueue(newQueue);
-          setCurrentSongIndex(0);
-      } else {
-          const originalQueue = originalQueueBeforeShuffle.current;
-          const currentSong = queue[currentSongIndex];
-          setQueue(originalQueue);
-          const newIndex = currentSong ? originalQueue.findIndex(s => s.id === currentSong.id) : 0;
-          setCurrentSongIndex(newIndex);
-      }
-  };
+    const handleToggleShuffle = useCallback((options?: { isNetwork?: boolean, value?: boolean }) => {
+        const newShuffleState = options?.value ?? !shuffle;
+
+        if (!options?.isNetwork && websocketRef.current?.readyState === WebSocket.OPEN) {
+            websocketRef.current.send(JSON.stringify({ type: 'shuffleCommand', payload: { value: newShuffleState } }));
+        }
+
+        setShuffle(newShuffleState);
+    
+        if (newShuffleState) {
+            originalQueueBeforeShuffle.current = [...queue];
+            const currentSong = queue[currentSongIndex];
+            const restOfQueue = queue.filter((_, i) => i !== currentSongIndex);
+            for (let i = restOfQueue.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [restOfQueue[i], restOfQueue[j]] = [restOfQueue[j], restOfQueue[i]];
+            }
+            const newQueue = currentSong ? [currentSong, ...restOfQueue] : restOfQueue;
+            setQueue(newQueue);
+            setCurrentSongIndex(0);
+        } else {
+            const originalQueue = originalQueueBeforeShuffle.current;
+            const currentSong = queue[currentSongIndex];
+            setQueue(originalQueue);
+            const newIndex = currentSong ? originalQueue.findIndex(s => s.id === currentSong.id) : 0;
+            setCurrentSongIndex(newIndex);
+        }
+    }, [shuffle, queue, currentSongIndex]);
+
+    const handleToggleLoop = useCallback((options?: { isNetwork?: boolean, value?: boolean }) => {
+        const newLoopState = options?.value ?? !loop;
+        if (!options?.isNetwork && websocketRef.current?.readyState === WebSocket.OPEN) {
+            websocketRef.current.send(JSON.stringify({ type: 'loopCommand', payload: { value: newLoopState } }));
+        }
+        setLoop(newLoopState);
+    }, [loop]);
 
     const addToQueue = (song: Song) => {
         if (!queue.some(s => s.id === song.id)) {
@@ -1061,14 +1084,30 @@ const App: React.FC = () => {
                     }
                     case 'playCommand': {
                         if (!isPlaying) {
-                            handlePlayPause();
+                            handlePlayPause({ isNetwork: true });
                         }
                         break;
                     }
                     case 'pauseCommand': {
                         if (isPlaying) {
-                            handlePlayPause();
+                            handlePlayPause({ isNetwork: true });
                         }
+                        break;
+                    }
+                    case 'nextCommand': {
+                        handleNext({ isNetwork: true });
+                        break;
+                    }
+                    case 'prevCommand': {
+                        handlePrev({ isNetwork: true });
+                        break;
+                    }
+                    case 'loopCommand': {
+                        handleToggleLoop({ isNetwork: true, value: message.payload.value });
+                        break;
+                    }
+                    case 'shuffleCommand': {
+                        handleToggleShuffle({ isNetwork: true, value: message.payload.value });
                         break;
                     }
                     default: {
@@ -1099,7 +1138,7 @@ const App: React.FC = () => {
             alert('Failed to connect to the network service. The service may be starting up. Please try again in a moment.');
             setNetworkStatus('error');
         };
-    }, [library, networkStatus, roomCode, isPlaying, handlePlayPause, getPeerConnection]);
+    }, [library, networkStatus, roomCode, isPlaying, handlePlayPause, getPeerConnection, handleNext, handlePrev, handleToggleLoop, handleToggleShuffle]);
 
     const handleHost = useCallback(() => {
         initWebSocket(() => {
@@ -1176,6 +1215,33 @@ const App: React.FC = () => {
         }
     }, [remoteLibrary, handleCompareLibraries]);
 
+    const handleDownloadAllMissing = useCallback(() => {
+        const remoteSongs = libraryRef.current.filter(s => s.isRemote && !downloadProgress[getSongKey(s)]);
+        if (remoteSongs.length === 0) {
+            alert('No new remote songs to download.');
+            return;
+        }
+
+        alert(`Starting download for ${remoteSongs.length} song(s).`);
+
+        let i = 0;
+        function downloadNext() {
+            if (i >= remoteSongs.length) {
+                console.log('Finished queueing all remote song downloads.');
+                return;
+            }
+            
+            const songToDownload = remoteSongs[i];
+            console.log(`Queueing download for: ${songToDownload.title}`);
+            handleDownloadSong(songToDownload.id);
+            
+            i++;
+            setTimeout(downloadNext, 200); // 200ms delay between requests
+        }
+
+        downloadNext();
+    }, [handleDownloadSong, downloadProgress]);
+
     useEffect(() => {
         return () => {
             websocketRef.current?.close();
@@ -1243,6 +1309,7 @@ const App: React.FC = () => {
                         onSharePlaylist={handleSharePlaylist}
                         onSyncCommon={handleSyncCommon}
                         onCompareLibraries={handleCompareLibrariesButtonClick}
+                        onDownloadAll={handleDownloadAllMissing}
                         playlists={playlists}
                     />
                 </div>
@@ -1269,9 +1336,9 @@ const App: React.FC = () => {
                 {isStatusBarVisible && <StatusBar status="Ready" />}
                 <PlayerControls
                     isPlaying={isPlaying}
-                    onPlayPause={handlePlayPause}
-                    onNext={handleNext}
-                    onPrev={handlePrev}
+                    onPlayPause={() => handlePlayPause()}
+                    onNext={() => handleNext()}
+                    onPrev={() => handlePrev()}
                     currentTime={currentTime}
                     duration={duration}
                     onSeek={handleSeek}
@@ -1280,9 +1347,9 @@ const App: React.FC = () => {
                     isMuted={isMuted}
                     onToggleMute={handleToggleMute}
                     loop={loop}
-                    onToggleLoop={() => setLoop(!loop)}
+                    onToggleLoop={handleToggleLoop}
                     shuffle={shuffle}
-                    onToggleShuffle={toggleShuffle}
+                    onToggleShuffle={handleToggleShuffle}
                     currentSong={currentSong}
                 />
             </footer>

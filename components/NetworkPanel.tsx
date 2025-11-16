@@ -13,6 +13,7 @@ interface NetworkPanelProps {
     onSharePlaylist: (playlistId: string) => void;
     onSyncCommon: () => void;
     onCompareLibraries: () => void;
+    onDownloadAll: () => void;
     playlists: Playlist[];
 }
 
@@ -27,6 +28,7 @@ export const NetworkPanel: React.FC<NetworkPanelProps> = ({
     onSharePlaylist,
     onSyncCommon,
     onCompareLibraries,
+    onDownloadAll,
     playlists,
 }) => {
     const [joinCode, setJoinCode] = useState('');
@@ -99,6 +101,7 @@ export const NetworkPanel: React.FC<NetworkPanelProps> = ({
                             )}
                             <button onClick={onSyncCommon} className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded">Sync Common</button>
                             <button onClick={onCompareLibraries} className="bg-indigo-600 hover:bg-indigo-500 text-sm py-2 px-3 rounded">Compare Libraries</button>
+                            <button onClick={onDownloadAll} className="col-span-2 bg-green-600 hover:bg-green-500 text-sm py-2 px-3 rounded">Download All Missing Songs</button>
                         </div>
                     </div>
                 );
