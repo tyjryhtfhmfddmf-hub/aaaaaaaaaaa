@@ -744,7 +744,10 @@ const App: React.FC = () => {
 
                                 setOutgoingFileChunks(prev => ({ ...prev, [songKey]: chunks }));
 
-                                chunks.forEach((chunk, i) => {
+                                let i = 0;
+                                function sendChunk() {
+                                    if (i >= chunks.length || websocketRef.current?.readyState !== WebSocket.OPEN) return;
+                                    const chunk = chunks[i];
                                     websocketRef.current?.send(JSON.stringify({
                                         type: 'songFileChunk',
                                         payload: {
@@ -755,7 +758,10 @@ const App: React.FC = () => {
                                             requester
                                         }
                                     }));
-                                });
+                                    i++;
+                                    setTimeout(sendChunk, 10); // Pace the sending
+                                }
+                                sendChunk();
                             };
                             reader.readAsArrayBuffer(songToSend.file);
                         }
@@ -815,35 +821,40 @@ const App: React.FC = () => {
                                     
                                     const reader = new FileReader();
                                     reader.onload = async (event) => {
-                                        const jsmediatags = (window as any).jsmediatags;
-
-                                        let albumArt = receivedSong.albumArt;
                                         try {
-                                            const tags = await new Promise((resolve, reject) => {
-                                                jsmediatags.read(newFile, { onSuccess: resolve, onError: reject });
-                                            });
-                                            const { picture } = tags.tags;
-                                            if (picture) {
-                                                const artBlob = new Blob([new Uint8Array(picture.data)], { type: picture.format });
-                                                albumArt = await blobToDataURL(artBlob);
+                                            const jsmediatags = (window as any).jsmediatags;
+
+                                            let albumArt = receivedSong.albumArt;
+                                            try {
+                                                const tags = await new Promise((resolve, reject) => {
+                                                    jsmediatags.read(newFile, { onSuccess: resolve, onError: reject });
+                                                });
+                                                const { picture } = tags.tags;
+                                                if (picture) {
+                                                    const artBlob = new Blob([new Uint8Array(picture.data)], { type: picture.format });
+                                                    albumArt = await blobToDataURL(artBlob);
+                                                }
+                                            } catch (error) {
+                                                console.error("Error reading tags from downloaded file, preserving old album art.", error);
                                             }
-                                        } catch (error) {
-                                            console.error("Error reading tags from downloaded file, preserving old album art.", error);
+
+                                            const updatedSong = {
+                                                ...receivedSong,
+                                                file: newFile,
+                                                isRemote: false,
+                                                albumArt: albumArt
+                                            };
+
+                                            await updateSongInDB(receivedSong.id, { file: newFile, isRemote: false, albumArt: albumArt ? new Blob([await fetch(albumArt).then(r => r.arrayBuffer())]) : undefined });
+
+                                            setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
+                                            setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
+
+                                            alert(`${receivedSong.title} has been downloaded!`);
+                                        } catch (dbError) {
+                                            console.error("Failed to save downloaded song to the database:", dbError);
+                                            alert(`Failed to save "${receivedSong.title}" to the library. Please try again.`);
                                         }
-
-                                        const updatedSong = {
-                                            ...receivedSong,
-                                            file: newFile,
-                                            isRemote: false,
-                                            albumArt: albumArt
-                                        };
-
-                                        await updateSongInDB(receivedSong.id, { file: newFile, isRemote: false, albumArt: albumArt ? new Blob([await fetch(albumArt).then(r => r.arrayBuffer())]) : undefined });
-
-                                        setLibrary(prevLib => prevLib.map(s => s.id === receivedSong.id ? updatedSong : s));
-                                        setQueue(prevQueue => prevQueue.map(s => s.id === receivedSong.id ? updatedSong : s));
-
-                                        alert(`${receivedSong.title} has been downloaded!`);
                                     };
                                     reader.readAsArrayBuffer(fileBlob);
                                     
