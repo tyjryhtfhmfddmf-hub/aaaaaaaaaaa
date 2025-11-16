@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { Song } from '../types';
+import { getSongKey } from '../lib/utils';
 import { AddIcon, FolderAddIcon, ChevronDownIcon, EditIcon, CheckIcon, RemoveIcon, TrashIcon, DownloadIcon } from './Icons';
 
 interface LibraryPanelProps {
@@ -9,9 +10,10 @@ interface LibraryPanelProps {
     onUpdateSong: (songId: string, newMetadata: { title: string; artist: string; album: string }) => void;
     onRemoveSong: (songId: string) => void;
     onDownloadSong: (songId: string) => void;
+    fileChunks: Record<string, { received: number; total: number }>;
 }
 
-export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdded, addToQueue, onUpdateSong, onRemoveSong, onDownloadSong }) => {
+export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdded, addToQueue, onUpdateSong, onRemoveSong, onDownloadSong, fileChunks }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
     const [editingSongId, setEditingSongId] = useState<string | null>(null);
@@ -221,8 +223,12 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
             <div className="flex-1 overflow-y-auto pr-2">
                 {library.length > 0 ? (
                     <ul className="space-y-1">
-                        {filteredLibrary.map(song => (
-                            editingSongId === song.id ? (
+                        {filteredLibrary.map(song => {
+                            const songKey = getSongKey(song);
+                            const download = fileChunks[songKey];
+                            const progress = download ? (download.received / download.total) * 100 : 0;
+
+                            return editingSongId === song.id ? (
                                 <li key={song.id} className="flex flex-col p-2 rounded-md bg-gray-700 space-y-2">
                                     <input
                                         type="text"
@@ -263,7 +269,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                         e.dataTransfer.setData('song-id', song.id);
                                         e.dataTransfer.effectAllowed = 'copy';
                                     } : undefined}
-                                    className={`group flex items-center p-2 rounded-md transition-colors ${song.isRemote ? 'opacity-60 cursor-not-allowed' : 'hover:bg-gray-700 cursor-pointer'}`}
+                                    className={`group flex items-center p-2 rounded-md transition-colors ${song.isRemote && !download ? 'opacity-60 cursor-not-allowed' : 'hover:bg-gray-700 cursor-pointer'}`}
                                 >
                                     {song.albumArt ? (
                                         <img src={song.albumArt} alt={song.album} className="w-10 h-10 rounded-md mr-3 object-cover flex-shrink-0" />
@@ -273,15 +279,20 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                        <p className={`font-medium truncate ${song.isRemote ? 'text-gray-500' : 'text-gray-200'}`}>{song.title}</p>
-                                        <p className={`text-sm truncate ${song.isRemote ? 'text-gray-600' : 'text-gray-400'}`}>{song.artist}</p>
+                                        <p className={`font-medium truncate ${song.isRemote && !download ? 'text-gray-500' : 'text-gray-200'}`}>{song.title}</p>
+                                        <p className={`text-sm truncate ${song.isRemote && !download ? 'text-gray-600' : 'text-gray-400'}`}>{song.artist}</p>
+                                        {download && (
+                                            <div className="w-full bg-gray-600 rounded-full h-1.5 mt-1">
+                                                <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex items-center ml-2 flex-shrink-0">
                                         <span className="text-sm text-gray-500 group-hover:hidden">
                                             {Math.floor(song.duration / 60)}:{(Math.floor(song.duration % 60)).toString().padStart(2, '0')}
                                         </span>
                                         <div className="hidden group-hover:flex items-center">
-                                            {song.isRemote && (
+                                            {song.isRemote && !download && (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -331,7 +342,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                     </div>
                                 </li>
                             )
-                        ))}
+                        })}
                     </ul>
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-gray-500 text-center">

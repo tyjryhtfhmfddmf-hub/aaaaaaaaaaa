@@ -1166,6 +1166,7 @@ const App: React.FC = () => {
                         onUpdateSong={handleUpdateSongMetadata}
                         onRemoveSong={handleRemoveSongFromLibrary}
                         onDownloadSong={handleDownloadSong}
+                        fileChunks={fileChunks}
                     />
                     <NetworkPanel
                         status={networkStatus}
