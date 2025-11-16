@@ -168,56 +168,55 @@ const App: React.FC = () => {
     const [activeUrl, setActiveUrl] = useState<string | null>(null);
     const footerRef = useRef<HTMLElement>(null);
     const libraryRef = useRef<Song[]>(library);
+    const chunkQueue = useRef<any[]>([]);
+    const chunkUpdateTimer = useRef<number | null>(null);
 
     useEffect(() => {
         libraryRef.current = library;
     }, [library]);
 
-    const handleDataChannelMessage = useCallback((event: MessageEvent) => {
-        console.log('handleDataChannelMessage called.');
-        const message = JSON.parse(event.data);
-        console.log(`Received message type: ${message.type}`);
-        if (message.type === 'songFileChunk') {
-            const { songKey: chunkSongKey, chunk, chunkIndex, totalChunks } = message.payload;
+    const applyChunkUpdates = useCallback(() => {
+        if (chunkQueue.current.length === 0) {
+            chunkUpdateTimer.current = null;
+            return;
+        }
 
-            if (downloadTimers.current[chunkSongKey]) {
-                clearTimeout(downloadTimers.current[chunkSongKey]);
-            }
+        const updatesToProcess = [...chunkQueue.current];
+        chunkQueue.current = [];
 
-            setFileChunks(prev => {
-                const newChunksState = { ...prev };
-                if (newChunksState[chunkSongKey]?.received === newChunksState[chunkSongKey]?.total) {
-                    return prev;
-                }
+        setFileChunks(prev => {
+            const newChunksState = { ...prev };
+
+            for (const payload of updatesToProcess) {
+                const { songKey: chunkSongKey, chunk, chunkIndex, totalChunks } = payload;
+                
+                if (newChunksState[chunkSongKey]?.received === newChunksState[chunkSongKey]?.total) continue;
+
                 if (!newChunksState[chunkSongKey]) {
                     newChunksState[chunkSongKey] = { chunks: [], received: 0, total: totalChunks };
                 }
                 if (!newChunksState[chunkSongKey].chunks[chunkIndex]) {
                     newChunksState[chunkSongKey].chunks[chunkIndex] = chunk;
                     newChunksState[chunkSongKey].received++;
+                    console.log(`Updating fileChunks for ${chunkSongKey}, received: ${newChunksState[chunkSongKey].received}/${newChunksState[chunkSongKey].total}`);
                 }
-                const currentDownload = newChunksState[chunkSongKey];
-                if (currentDownload.received < currentDownload.total) {
-                    downloadTimers.current[chunkSongKey] = window.setTimeout(() => {
-                        const missingIndices: number[] = [];
-                        for (let i = 0; i < currentDownload.total; i++) {
-                            if (!currentDownload.chunks[i]) {
-                                missingIndices.push(i);
-                            }
-                        }
-                        if (missingIndices.length > 0) {
-                            const dc = Object.values(dataChannels.current).find(d => d.readyState === 'open');
-                            if (dc) {
-                                 dc.send(JSON.stringify({
-                                    type: 'requestMissingFileChunks',
-                                    payload: { songKey: chunkSongKey, missingIndices }
-                                }));
-                            }
-                        }
-                    }, 5000);
-                }
-                return newChunksState;
-            });
+            }
+            return newChunksState;
+        });
+
+        chunkUpdateTimer.current = null;
+    }, []);
+
+    const handleDataChannelMessage = useCallback((event: MessageEvent) => {
+        console.log('handleDataChannelMessage called.');
+        const message = JSON.parse(event.data);
+        console.log(`Received message type: ${message.type}`);
+
+        if (message.type === 'songFileChunk') {
+            chunkQueue.current.push(message.payload);
+            if (chunkUpdateTimer.current === null) {
+                chunkUpdateTimer.current = window.setTimeout(applyChunkUpdates, 100);
+            }
         } else if (message.type === 'requestMissingFileChunks') {
              const { songKey: missingSongKey, missingIndices } = message.payload;
              const cachedChunks = outgoingFileChunks[missingSongKey];
@@ -240,7 +239,7 @@ const App: React.FC = () => {
                  });
              }
         }
-    }, [outgoingFileChunks]);
+    }, [outgoingFileChunks, applyChunkUpdates]);
 
     const getPeerConnection = useCallback((peerId: number, senderId: number) => {
         if (peerConnections.current[peerId]) {
@@ -347,9 +346,38 @@ const App: React.FC = () => {
     useEffect(() => {
         for (const songKey in fileChunks) {
             const download = fileChunks[songKey];
-            // Ensure chunks array is not sparse and has all data before processing
-            if (download && download.received === download.total && download.chunks.length === download.total) {
-                processDownloadedFile(songKey, download.chunks);
+            if (download) {
+                // Clear any existing timer for this download
+                if (downloadTimers.current[songKey]) {
+                    clearTimeout(downloadTimers.current[songKey]);
+                }
+
+                if (download.received === download.total && download.chunks.length === download.total) {
+                    // All chunks are here. Process the file.
+                    processDownloadedFile(songKey, download.chunks);
+                } else {
+                    // Download is incomplete, set a timer to check for missing chunks
+                    downloadTimers.current[songKey] = window.setTimeout(() => {
+                        const missingIndices: number[] = [];
+                        for (let i = 0; i < download.total; i++) {
+                            if (!download.chunks[i]) {
+                                missingIndices.push(i);
+                            }
+                        }
+
+                        if (missingIndices.length > 0) {
+                            console.log(`Requesting ${missingIndices.length} missing chunks for ${songKey} after timeout.`);
+                            // Find an open data channel to send the request
+                            const dc = Object.values(dataChannels.current).find(d => d.readyState === 'open');
+                            if (dc) {
+                                dc.send(JSON.stringify({
+                                    type: 'requestMissingFileChunks',
+                                    payload: { songKey, missingIndices }
+                                }));
+                            }
+                        }
+                    }, 5000); // 5-second timeout
+                }
             }
         }
     }, [fileChunks, processDownloadedFile]);
