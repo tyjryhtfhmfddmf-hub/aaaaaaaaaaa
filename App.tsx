@@ -242,9 +242,11 @@ const App: React.FC = () => {
 
     const getPeerConnection = useCallback((peerId: number, senderId: number) => {
         if (peerConnections.current[peerId]) {
-            return peerConnections.current[peerId];
+            console.log(`Closing existing peer connection for peer ${peerId} in state ${peerConnections.current[peerId].signalingState}`);
+            peerConnections.current[peerId].close();
         }
 
+        console.log(`Creating new peer connection for peer ${peerId}`);
         const pc = new RTCPeerConnection({
             iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
         });
