@@ -138,15 +138,22 @@ const App: React.FC = () => {
     const [isStatusBarVisible, setIsStatusBarVisible] = useState<boolean>(false);
     const [rememberQueue, setRememberQueue] = useState<boolean>(true);
     const [theme, setTheme] = useState<string>('default');
+    const [uiScale, setUiScale] = useState(1);
     const [customPalettes, setCustomPalettes] = useState<CustomPalette[]>([]);
     const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
     const [comparisonData, setComparisonData] = useState<ComparisonData | null>(null);
     const [remoteLibrary, setRemoteLibrary] = useState<Song[]>([]);
     const [downloadProgress, setDownloadProgress] = useState<Record<string, { received: number, total: number }>>({});
+    const [isNetworkPanelCollapsed, setIsNetworkPanelCollapsed] = useState<boolean>(false);
     const [activeCustomColors, setActiveCustomColors] = useState<CustomPalette['colors']>({
         primary: '#4F46E5',
         accent: '#34D399',
         text: '#E5E7EB',
+        backgroundPrimary: '#111827',
+        backgroundSecondary: '#1F2937',
+        backgroundTertiary: '#374151',
+        backgroundPlayer: '#111827',
+        textPrimary: '#E5E7EB',
     });
 
     // --- Network State ---
@@ -457,6 +464,11 @@ const App: React.FC = () => {
         const savedTheme = localStorage.getItem('music_theme') || 'default';
         setTheme(savedTheme);
 
+        const savedUiScale = localStorage.getItem('music_ui_scale');
+        if (savedUiScale) {
+            setUiScale(parseFloat(savedUiScale));
+        }
+
         const savedPalettes = localStorage.getItem('music_custom_palettes');
         if (savedPalettes) {
             const parsedPalettes = JSON.parse(savedPalettes);
@@ -467,6 +479,11 @@ const App: React.FC = () => {
             }
         }
     }, []);
+
+    useEffect(() => {
+        document.documentElement.style.fontSize = `${uiScale * 16}px`;
+        localStorage.setItem('music_ui_scale', uiScale.toString());
+    }, [uiScale]);
     
     const applyCustomColors = useCallback((colors: CustomPalette['colors']) => {
         const root = document.documentElement;
@@ -505,7 +522,15 @@ const App: React.FC = () => {
         root.style.setProperty('--custom-color-accent', colors.accent);
         root.style.setProperty('--custom-color-text', colors.text);
         root.style.setProperty('--custom-color-primary-t-50', hexToRgba(colors.primary, 0.5));
-
+        root.style.setProperty('--custom-color-bg-primary', colors.backgroundPrimary);
+        root.style.setProperty('--custom-color-bg-secondary', colors.backgroundSecondary);
+        root.style.setProperty('--custom-color-bg-secondary-t-50', hexToRgba(colors.backgroundSecondary, 0.5));
+        root.style.setProperty('--custom-color-bg-secondary-t-60', hexToRgba(colors.backgroundSecondary, 0.6));
+        root.style.setProperty('--custom-color-bg-primary-t-50', hexToRgba(colors.backgroundPrimary, 0.5));
+        root.style.setProperty('--custom-color-bg-tertiary', colors.backgroundTertiary);
+        root.style.setProperty('--custom-color-bg-tertiary-t-50', hexToRgba(colors.backgroundTertiary, 0.5));
+        root.style.setProperty('--custom-color-bg-player', colors.backgroundPlayer);
+        root.style.setProperty('--custom-color-text-primary', colors.textPrimary);
     }, []);
 
     useEffect(() => {
@@ -1281,9 +1306,9 @@ const App: React.FC = () => {
     }, [currentSong]);
 
     return (
-        <div className="h-screen w-screen flex flex-col bg-gray-900 text-gray-200 font-sans overflow-hidden" style={{ minHeight: '480px' }}>
+        <div className="h-screen w-screen flex flex-col font-sans overflow-hidden" style={{ minHeight: '480px', backgroundColor: 'var(--custom-color-bg-primary)', color: 'var(--custom-color-text-primary)' }}>
             <main className="relative flex-1 flex flex-col lg:flex-row overflow-hidden">
-                <div className="w-full lg:w-1/3 flex flex-col border-r border-gray-800 bg-gray-900 overflow-hidden min-w-0">
+                <div className="w-full lg:w-1/3 flex flex-col border-r border-gray-800 overflow-hidden min-w-0" style={{ backgroundColor: 'var(--custom-color-bg-primary)' }}>
                     <LibraryTabs 
                         library={library}
                         onSongsAdded={handleSongsAdded}
@@ -1299,6 +1324,8 @@ const App: React.FC = () => {
                         downloadProgress={downloadProgress}
                     />
                     <NetworkPanel
+                        isCollapsed={isNetworkPanelCollapsed}
+                        onToggleCollapse={() => setIsNetworkPanelCollapsed(prev => !prev)}
                         status={networkStatus}
                         isHost={isHost}
                         roomCode={roomCode}
@@ -1313,7 +1340,7 @@ const App: React.FC = () => {
                         playlists={playlists}
                     />
                 </div>
-                <div className="w-full lg:w-2/3 flex flex-col bg-gray-800/50 min-w-0">
+                <div className="w-full lg:w-2/3 flex flex-col min-w-0" style={{ backgroundColor: 'var(--custom-color-bg-secondary-t-50)'}}>
                     <QueuePanel 
                         queue={queue}
                         currentSongId={currentSong?.id}
@@ -1330,8 +1357,8 @@ const App: React.FC = () => {
             <footer 
                 id="player-footer"
                 ref={footerRef}
-                className="w-full bg-gray-900 border-t border-gray-800 shadow-lg z-10"
-                style={{ backgroundColor: 'var(--player-bg-color)' }}
+                className="w-full border-t border-gray-800 shadow-lg z-10"
+                style={{ backgroundColor: 'var(--player-bg-color, var(--custom-color-bg-player))' }}
             >
                 {isStatusBarVisible && <StatusBar status="Ready" />}
                 <PlayerControls
@@ -1385,6 +1412,8 @@ const App: React.FC = () => {
                     onUpdateCustomPalette={updateCustomPalette}
                     activeCustomColors={activeCustomColors}
                     onCustomColorChange={handleCustomColorChange}
+                    uiScale={uiScale}
+                    onUiScaleChange={setUiScale}
                 />
             )}
 

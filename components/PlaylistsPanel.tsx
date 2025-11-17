@@ -117,7 +117,7 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ library, playlis
                                     className="group flex items-center p-2 rounded-md hover:bg-gray-700 cursor-pointer transition-colors"
                                 >
                                     <div className="flex-1">
-                                        <p className="font-medium text-gray-200">{song.title}</p>
+                                        <p className="font-medium text-custom-text-primary">{song.title}</p>
                                         <p className="text-sm text-gray-400">{song.artist}</p>
                                     </div>
                                     <span className="text-sm text-gray-500 mr-4">
@@ -162,7 +162,7 @@ export const PlaylistsPanel: React.FC<PlaylistsPanelProps> = ({ library, playlis
                                     onClick={() => setSelectedPlaylist(playlist)}
                                     onDoubleClick={() => loadPlaylist(playlist)}
                                 >
-                                    <p className="font-semibold text-gray-200">{playlist.name}</p>
+                                    <p className="font-semibold text-custom-text-primary">{playlist.name}</p>
                                     <p className="text-sm text-gray-400">{playlist.songIds.length} song{playlist.songIds.length !== 1 ? 's' : ''}</p>
                                 </div>
                                 <button

@@ -1,6 +1,8 @@
 
 import React, { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import type { Playlist } from '../types';
+import { cn } from '../lib/utils';
 
 interface NetworkPanelProps {
     status: 'offline' | 'connecting' | 'connected' | 'error';
@@ -15,6 +17,8 @@ interface NetworkPanelProps {
     onCompareLibraries: () => void;
     onDownloadAll: () => void;
     playlists: Playlist[];
+    isCollapsed: boolean;
+    onToggleCollapse: () => void;
 }
 
 export const NetworkPanel: React.FC<NetworkPanelProps> = ({
@@ -30,6 +34,8 @@ export const NetworkPanel: React.FC<NetworkPanelProps> = ({
     onCompareLibraries,
     onDownloadAll,
     playlists,
+    isCollapsed,
+    onToggleCollapse,
 }) => {
     const [joinCode, setJoinCode] = useState('');
     const [selectedPlaylistId, setSelectedPlaylistId] = useState<string>('');
@@ -158,9 +164,28 @@ export const NetworkPanel: React.FC<NetworkPanelProps> = ({
     };
 
     return (
-        <div className="p-4 border-t border-gray-800 bg-gray-800/20">
-            <h2 className="text-lg font-bold text-indigo-400 mb-2">Network Sync</h2>
-            {renderContent()}
+        <div className="border-t border-gray-800 bg-gray-800/20">
+            <button
+                onClick={onToggleCollapse}
+                className="w-full flex justify-between items-center p-4 focus:outline-none"
+            >
+                <h2 className="text-lg font-bold text-indigo-400">Network Sync</h2>
+                <ChevronDown
+                    className={cn('w-6 h-6 text-indigo-400 transform transition-transform', {
+                        'rotate-180': isCollapsed,
+                    })}
+                />
+            </button>
+            <div
+                className={cn('overflow-hidden transition-all duration-300 ease-in-out', {
+                    'max-h-0': isCollapsed,
+                    'max-h-screen': !isCollapsed,
+                })}
+            >
+                <div className="p-4 pt-0">
+                    {renderContent()}
+                </div>
+            </div>
         </div>
     );
 };

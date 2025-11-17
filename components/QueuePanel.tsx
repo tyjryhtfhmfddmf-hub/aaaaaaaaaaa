@@ -103,7 +103,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({ queue, currentSongId, on
                             >
                                 <span className="text-gray-400 w-8">{index + 1}.</span>
                                 <div className="flex-1 flex flex-col mx-3">
-                                    <p className={`font-medium ${currentSongId === song.id ? 'text-white' : 'text-gray-200'}`}>
+                                    <p className={`font-medium ${currentSongId === song.id ? 'text-white' : 'text-custom-text-primary'}`}>
                                         {song.title}
                                     </p>
                                     <p className="text-sm text-gray-400">{song.artist}</p>

@@ -173,7 +173,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                     placeholder="Search library..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="flex-grow bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="flex-growstyle={{ backgroundColor: 'var(--custom-color-bg-tertiary)' }} border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <input
                     type="file"
@@ -192,7 +192,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                         <ChevronDownIcon />
                     </button>
                     {isAddMenuOpen && (
-                        <div className="absolute right-0 mt-2 w-48 bg-gray-700 rounded-md shadow-lg z-20 border border-gray-600">
+                        <div className="absolute right-0 mt-2 w-48style={{ backgroundColor: 'var(--custom-color-bg-tertiary)' }} rounded-md shadow-lg z-20 border border-gray-600">
                             <ul className="py-1">
                                 <li>
                                     <button
@@ -200,7 +200,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                             fileInputRef.current?.click();
                                             setIsAddMenuOpen(false);
                                         }}
-                                        className="w-full text-left flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600/50"
+                                        className="w-full text-left flex items-center px-4 py-2 text-sm text-custom-text-primary hover:bg-indigo-600/50"
                                     >
                                         <AddIcon />
                                         <span className="ml-3">Add Songs</span>
@@ -209,7 +209,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                 <li>
                                     <button
                                         onClick={handleAddFolderClick}
-                                        className="w-full text-left flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600/50"
+                                        className="w-full text-left flex items-center px-4 py-2 text-sm text-custom-text-primary hover:bg-indigo-600/50"
                                     >
                                         <FolderAddIcon />
                                         <span className="ml-3">Add Folder</span>
@@ -229,7 +229,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                             const progress = download ? (download.received / download.total) * 100 : 0;
 
                             return editingSongId === song.id ? (
-                                <li key={song.id} className="flex flex-col p-2 rounded-md bg-gray-700 space-y-2">
+                                <li key={song.id} className="flex flex-col p-2 rounded-mdstyle={{ backgroundColor: 'var(--custom-color-bg-tertiary)' }} space-y-2">
                                     <input
                                         type="text"
                                         name="title"
@@ -279,7 +279,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                        <p className={`font-medium truncate ${song.isRemote && !download ? 'text-gray-500' : 'text-gray-200'}`}>{song.title}</p>
+                                        <p className={`font-medium truncate ${song.isRemote && !download ? 'text-gray-500' : 'text-custom-text-primary'}`}>{song.title}</p>
                                         <p className={`text-sm truncate ${song.isRemote && !download ? 'text-gray-600' : 'text-gray-400'}`}>{song.artist}</p>
                                         {download && (
                                             <div className="w-full bg-gray-600 rounded-full h-1.5 mt-1">

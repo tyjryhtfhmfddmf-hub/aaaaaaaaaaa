@@ -34,7 +34,7 @@ export const LibraryTabs: React.FC<LibraryTabsProps> = (props) => {
     const getTabClass = (tab: Tab) => {
         return activeTab === tab
             ? 'border-indigo-400 text-indigo-300'
-            : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500';
+            : 'border-transparent text-gray-400 hover:text-custom-text-primary hover:border-gray-500';
     };
 
     const libraryPanelProps = {

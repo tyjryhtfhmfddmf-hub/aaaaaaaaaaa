@@ -1,5 +1,3 @@
-
-
 import React, { useState } from 'react';
 import { RemoveIcon, EditIcon, CheckIcon } from './Icons';
 import type { CustomPalette } from '../types';
@@ -19,6 +17,8 @@ interface SettingsModalProps {
     onUpdateCustomPalette: (id: string, newName: string) => void;
     activeCustomColors: CustomPalette['colors'];
     onCustomColorChange: (colors: CustomPalette['colors']) => void;
+    uiScale: number;
+    onUiScaleChange: (scale: number) => void;
 }
 
 const ToggleSwitch: React.FC<{ enabled: boolean; onToggle: () => void; id: string }> = ({ enabled, onToggle, id }) => {
@@ -56,6 +56,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onUpdateCustomPalette,
     activeCustomColors,
     onCustomColorChange,
+    uiScale,
+    onUiScaleChange,
 }) => {
     const [editingPaletteId, setEditingPaletteId] = useState<string | null>(null);
     const [editingPaletteName, setEditingPaletteName] = useState('');
@@ -100,7 +102,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50" onClick={onClose}>
             <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-white">Settings</h2>
+                    <h2 className="text-2xl font-bold text-white">Settings</h2>
                     <button 
                         onClick={onClose} 
                         className="p-1 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
@@ -112,21 +114,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-3">
                     <div>
-                         <h3 className="text-gray-300 font-medium mb-2 text-sm uppercase tracking-wider">General</h3>
+                         <h3 className="text-gray-300 font-medium mb-2 text-base uppercase tracking-wider">General</h3>
                         <div className="space-y-2 p-3 bg-gray-700/50 rounded-lg">
                              <div className="flex items-center justify-between">
-                                <label htmlFor="statusBarToggle" className="text-gray-200">Show Status Bar</label>
+                                <label htmlFor="statusBarToggle" className="text-custom-text-primary">Show Status Bar</label>
                                 <ToggleSwitch enabled={isStatusBarVisible} onToggle={onToggleStatusBar} id="statusBarToggle" />
                             </div>
                             <div className="flex items-center justify-between">
-                                <label htmlFor="rememberQueueToggle" className="text-gray-200">Remember 'Up Next' Queue</label>
+                                <label htmlFor="rememberQueueToggle" className="text-custom-text-primary">Remember 'Up Next' Queue</label>
                                 <ToggleSwitch enabled={rememberQueue} onToggle={onToggleRememberQueue} id="rememberQueueToggle" />
                             </div>
                         </div>
                     </div>
 
                     <div>
-                        <h3 className="text-gray-300 font-medium mb-2 text-sm uppercase tracking-wider">Appearance</h3>
+                        <h3 className="text-gray-300 font-medium mb-2 text-base uppercase tracking-wider">UI Scale</h3>
+                        <div className="p-3 bg-gray-700/50 rounded-lg">
+                            <div className="flex items-center justify-between">
+                                <label htmlFor="uiScaleSlider" className="text-custom-text-primary">Size: {Math.round(uiScale * 100)}%</label>
+                                <input
+                                    id="uiScaleSlider"
+                                    type="range"
+                                    min="0.5"
+                                    max="1.5"
+                                    step="0.05"
+                                    value={uiScale}
+                                    onChange={e => onUiScaleChange(parseFloat(e.target.value))}
+                                    className="w-48"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-gray-300 font-medium mb-2 text-base uppercase tracking-wider">Appearance</h3>
                         <div className="space-y-2 p-3 bg-gray-700/50 rounded-lg">
                             <button onClick={() => onThemeChange('default')} className={`w-full text-left px-3 py-2 rounded-md transition-colors ${theme === 'default' ? 'bg-indigo-600 text-white font-semibold' : 'hover:bg-gray-600/50'}`}>
                                 Default
@@ -185,20 +206,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
 
                     <div>
-                        <h3 className="text-gray-300 font-medium mb-2 text-sm uppercase tracking-wider">Custom Theme Editor</h3>
+                        <h3 className="text-gray-300 font-medium mb-2 text-base uppercase tracking-wider">Custom Theme Editor</h3>
                         <div className="space-y-4 p-3 bg-gray-700/50 rounded-lg">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="flex flex-col">
-                                    <label htmlFor="primaryColor" className="text-sm text-gray-400 mb-1">Primary</label>
+                                    <label htmlFor="primaryColor" className="text-base text-gray-400 mb-1">Primary</label>
                                     <input type="color" id="primaryColor" value={activeCustomColors.primary} onChange={e => handleColorChange('primary', e.target.value)} className="w-full h-10 p-1 bg-gray-600 border border-gray-500 rounded cursor-pointer" />
                                 </div>
                                 <div className="flex flex-col">
-                                    <label htmlFor="accentColor" className="text-sm text-gray-400 mb-1">Accent</label>
+                                    <label htmlFor="accentColor" className="text-base text-gray-400 mb-1">Accent</label>
                                     <input type="color" id="accentColor" value={activeCustomColors.accent} onChange={e => handleColorChange('accent', e.target.value)} className="w-full h-10 p-1 bg-gray-600 border border-gray-500 rounded cursor-pointer" />
                                 </div>
                                 <div className="flex flex-col">
-                                    <label htmlFor="textColor" className="text-sm text-gray-400 mb-1">Accent Text</label>
+                                    <label htmlFor="textColor" className="text-base text-gray-400 mb-1">Accent Text</label>
                                     <input type="color" id="textColor" value={activeCustomColors.text} onChange={e => handleColorChange('text', e.target.value)} className="w-full h-10 p-1 bg-gray-600 border border-gray-500 rounded cursor-pointer" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <label htmlFor="textPrimaryColor" className="text-base text-gray-400 mb-1">Text</label>
+                                    <input type="color" id="textPrimaryColor" value={activeCustomColors.textPrimary} onChange={e => handleColorChange('textPrimary', e.target.value)} className="w-full h-10 p-1 bg-gray-600 border border-gray-500 rounded cursor-pointer" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex flex-col">
+                                    <label htmlFor="backgroundPrimaryColor" className="text-base text-gray-400 mb-1">Background Primary</label>
+                                    <input type="color" id="backgroundPrimaryColor" value={activeCustomColors.backgroundPrimary} onChange={e => handleColorChange('backgroundPrimary', e.target.value)} className="w-full h-10 p-1 bg-gray-600 border border-gray-500 rounded cursor-pointer" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <label htmlFor="backgroundSecondaryColor" className="text-base text-gray-400 mb-1">Background Secondary</label>
+                                    <input type="color" id="backgroundSecondaryColor" value={activeCustomColors.backgroundSecondary} onChange={e => handleColorChange('backgroundSecondary', e.target.value)} className="w-full h-10 p-1 bg-gray-600 border border-gray-500 rounded cursor-pointer" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                                <div className="flex flex-col">
+                                    <label htmlFor="backgroundTertiaryColor" className="text-base text-gray-400 mb-1">Background Tertiary</label>
+                                    <input type="color" id="backgroundTertiaryColor" value={activeCustomColors.backgroundTertiary} onChange={e => handleColorChange('backgroundTertiary', e.target.value)} className="w-full h-10 p-1 bg-gray-600 border border-gray-500 rounded cursor-pointer" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <label htmlFor="backgroundPlayerColor" className="text-base text-gray-400 mb-1">Background Player</label>
+                                    <input type="color" id="backgroundPlayerColor" value={activeCustomColors.backgroundPlayer} onChange={e => handleColorChange('backgroundPlayer', e.target.value)} className="w-full h-10 p-1 bg-gray-600 border border-gray-500 rounded cursor-pointer" />
                                 </div>
                             </div>
                             <div className="flex items-center space-x-2">
