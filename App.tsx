@@ -38,7 +38,6 @@ const initDB = (): Promise<IDBDatabase> => {
 };
 
 const addSongsToDB = (songs: any[]): Promise<void> => {
-    console.log('Adding songs to DB:', songs[0]);
     return new Promise(async (resolve, reject) => {
         const db = await initDB();
         const transaction = db.transaction(SONG_STORE, 'readwrite');
@@ -62,7 +61,6 @@ const getSongsFromDB = (): Promise<any[]> => {
         const store = transaction.objectStore(SONG_STORE);
         const getAllRequest = store.getAll();
         transaction.oncomplete = () => {
-            console.log('Retrieved songs from DB:', getAllRequest.result[0]);
             db.close();
             resolve(getAllRequest.result);
         };
@@ -424,7 +422,7 @@ const App: React.FC = () => {
             const processedSongs = await Promise.all(
                 dbSongs.map(async (song) => ({
                     ...song,
-                    albumArt: song.albumArt ? await blobToDataURL(song.albumArt) : undefined,
+                    albumArt: song.albumArt instanceof Blob ? await blobToDataURL(song.albumArt) : song.albumArt,
                 }))
             );
             setLibrary(processedSongs);
