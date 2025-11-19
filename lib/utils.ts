@@ -7,7 +7,9 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const getSongKey = (song: Song): string => {
-  return `${song.title.toLowerCase()}_${song.artist.toLowerCase()}`;
+  const title = song.title || 'Unknown Title';
+  const artist = song.artist || 'Unknown Artist';
+  return `${title.trim()}-${artist.trim()}`.toLowerCase();
 };
 
 export const compareLibraries = (

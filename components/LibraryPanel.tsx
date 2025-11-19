@@ -54,6 +54,11 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                     jsmediatags.read(file, { onSuccess: resolve, onError: reject });
                 });
 
+                const fileBuffer = await file.arrayBuffer();
+                const hashBuffer = await crypto.subtle.digest('SHA-256', fileBuffer);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                const id = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
                 let albumArtBlob: Blob | undefined = undefined;
                 const { picture } = tags.tags;
                 if (picture) {
@@ -73,7 +78,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                 });
                 
                 const newSong = {
-                    id: `${file.name}-${file.size}-${Date.now()}`,
+                    id: id,
                     title: tags.tags.title || file.name.replace(/\.[^/.]+$/, ""),
                     artist: tags.tags.artist || 'Unknown Artist',
                     album: tags.tags.album || 'Unknown Album',
@@ -85,6 +90,11 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
 
             } catch (error) {
                 console.error('Error reading tags for', file.name, error);
+                const fileBuffer = await file.arrayBuffer();
+                const hashBuffer = await crypto.subtle.digest('SHA-256', fileBuffer);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                const id = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
                  const duration: number = await new Promise(resolve => {
                     const audio = new Audio(URL.createObjectURL(file));
                     audio.addEventListener('loadedmetadata', () => {
@@ -97,7 +107,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                     });
                 });
                 const fallbackSong = {
-                    id: `${file.name}-${file.size}-${Date.now()}`,
+                    id: id,
                     title: file.name.replace(/\.[^/.]+$/, ""),
                     artist: 'Unknown Artist',
                     album: 'Unknown Album',

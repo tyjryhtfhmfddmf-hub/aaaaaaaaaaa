@@ -38,6 +38,7 @@ const initDB = (): Promise<IDBDatabase> => {
 };
 
 const addSongsToDB = (songs: any[]): Promise<void> => {
+    console.log('Adding songs to DB:', songs[0]);
     return new Promise(async (resolve, reject) => {
         const db = await initDB();
         const transaction = db.transaction(SONG_STORE, 'readwrite');
@@ -61,6 +62,7 @@ const getSongsFromDB = (): Promise<any[]> => {
         const store = transaction.objectStore(SONG_STORE);
         const getAllRequest = store.getAll();
         transaction.oncomplete = () => {
+            console.log('Retrieved songs from DB:', getAllRequest.result[0]);
             db.close();
             resolve(getAllRequest.result);
         };
@@ -948,9 +950,9 @@ const App: React.FC = () => {
                         break;
                     }
                     case 'queueUpdate': {
-                        const receivedQueueKeys = message.payload.queue as string[];
-                        const newQueue = receivedQueueKeys
-                            .map(key => library.find(song => getSongKey(song) === key))
+                        const receivedQueueIds = message.payload.queue as string[];
+                        const newQueue = receivedQueueIds
+                            .map(id => library.find(song => song.id === id))
                             .filter((s): s is Song => !!s);
                         setQueue(newQueue);
                         alert(`Queue has been updated by a user in room ${roomCode}.`);
@@ -1112,6 +1114,30 @@ const App: React.FC = () => {
                         alert(`Network Error: ${alertMessage}`);
                         setNetworkStatus('error');
                         ws.close();
+                        break;
+                    }
+                    case 'fullSync': {
+                        const { type, payload } = message.payload;
+                        switch (type) {
+                            case 'playCommand':
+                                handlePlayPause({ isNetwork: true });
+                                break;
+                            case 'pauseCommand':
+                                handlePlayPause({ isNetwork: true });
+                                break;
+                            case 'nextCommand':
+                                handleNext({ isNetwork: true });
+                                break;
+                            case 'prevCommand':
+                                handlePrev({ isNetwork: true });
+                                break;
+                            case 'loopCommand':
+                                handleToggleLoop({ isNetwork: true, value: payload.value });
+                                break;
+                            case 'shuffleCommand':
+                                handleToggleShuffle({ isNetwork: true, value: payload.value });
+                                break;
+                        }
                         break;
                     }
                     case 'playCommand': {
