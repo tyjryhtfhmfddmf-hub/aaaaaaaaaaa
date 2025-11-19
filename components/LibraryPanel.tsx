@@ -173,7 +173,8 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                     placeholder="Search library..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="flex-growstyle={{ backgroundColor: 'var(--custom-color-bg-tertiary)' }} border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="flex-grow border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    style={{ backgroundColor: 'var(--custom-color-bg-tertiary)' }}
                 />
                 <input
                     type="file"
