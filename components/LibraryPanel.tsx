@@ -200,7 +200,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                             fileInputRef.current?.click();
                                             setIsAddMenuOpen(false);
                                         }}
-                                        className="w-full text-left flex items-center px-4 py-2 text-sm text-custom-text-primary hover:bg-indigo-600/50"
+                                        className="w-full text-left flex items-center px-4 py-2 text-sm text-custom-text-primary bg-gray-800 hover:bg-indigo-600"
                                     >
                                         <AddIcon />
                                         <span className="ml-3">Add Songs</span>
@@ -209,7 +209,7 @@ export const LibraryPanel: React.FC<LibraryPanelProps> = ({ library, onSongsAdde
                                 <li>
                                     <button
                                         onClick={handleAddFolderClick}
-                                        className="w-full text-left flex items-center px-4 py-2 text-sm text-custom-text-primary hover:bg-indigo-600/50"
+                                        className="w-full text-left flex items-center px-4 py-2 text-sm text-custom-text-primary bg-gray-800 hover:bg-indigo-600"
                                     >
                                         <FolderAddIcon />
                                         <span className="ml-3">Add Folder</span>
