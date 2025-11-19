@@ -145,6 +145,7 @@ const App: React.FC = () => {
     const [remoteLibrary, setRemoteLibrary] = useState<Song[]>([]);
     const [downloadProgress, setDownloadProgress] = useState<Record<string, { received: number, total: number }>>({});
     const [isNetworkPanelCollapsed, setIsNetworkPanelCollapsed] = useState<boolean>(false);
+    const [updateStatus, setUpdateStatus] = useState('');
     const [activeCustomColors, setActiveCustomColors] = useState<CustomPalette['colors']>({
         primary: '#4F46E5',
         accent: '#34D399',
@@ -477,6 +478,12 @@ const App: React.FC = () => {
                 const activePalette = parsedPalettes.find((p: CustomPalette) => p.id === localStorage.getItem('music_active_palette_id'));
                  if (activePalette) setActiveCustomColors(activePalette.colors);
             }
+        }
+
+        if (window.electronAPI) {
+            window.electronAPI.onUpdateStatus((status) => {
+                setUpdateStatus(status);
+            });
         }
     }, []);
 
@@ -1267,6 +1274,12 @@ const App: React.FC = () => {
         downloadNext();
     }, [handleDownloadSong, downloadProgress]);
 
+    const handleCheckForUpdates = () => {
+        if (window.electronAPI) {
+            window.electronAPI.checkForUpdates();
+        }
+    };
+
     useEffect(() => {
         return () => {
             websocketRef.current?.close();
@@ -1414,6 +1427,8 @@ const App: React.FC = () => {
                     onCustomColorChange={handleCustomColorChange}
                     uiScale={uiScale}
                     onUiScaleChange={setUiScale}
+                    onCheckForUpdates={handleCheckForUpdates}
+                    updateStatus={updateStatus}
                 />
             )}
 
