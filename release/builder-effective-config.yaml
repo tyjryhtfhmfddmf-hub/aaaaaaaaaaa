@@ -1,0 +1,15 @@
+directories:
+  output: release
+  buildResources: assets
+appId: com.musicsync.app
+productName: Music Sync
+files:
+  - filter:
+      - dist/**/*
+      - electron/main.js
+      - electron/preload.js
+win:
+  target: nsis
+mac:
+  target: dmg
+electronVersion: 29.4.6
