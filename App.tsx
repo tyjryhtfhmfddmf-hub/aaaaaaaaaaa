@@ -185,10 +185,15 @@ const App: React.FC = () => {
     const footerRef = useRef<HTMLElement>(null);
     const libraryRef = useRef<Song[]>(library);
     const chunkData = useRef<Record<string, any[]>>({});
+    const playerStateRef = useRef({ queue, currentSongIndex, isPlaying, shuffle, loop });
 
     useEffect(() => {
         libraryRef.current = library;
     }, [library]);
+
+    useEffect(() => {
+        playerStateRef.current = { queue, currentSongIndex, isPlaying, shuffle, loop };
+    }, [queue, currentSongIndex, isPlaying, shuffle, loop]);
 
     const handleDataChannelMessage = useCallback((event: MessageEvent) => {
         const message = JSON.parse(event.data);
@@ -1004,7 +1009,6 @@ const App: React.FC = () => {
                 const message = JSON.parse(event.data);
                 console.log('Received message:', message);
 
-                // Set flag to prevent echoing state back
                 isApplyingNetworkState.current = true;
 
                 switch (message.type) {
@@ -1051,7 +1055,6 @@ const App: React.FC = () => {
                     case 'playlistUpdate': {
                         const { playlist } = message.payload;
                         alert(`Playlist "${playlist.name}" has been shared by a user in room ${roomCode}.`);
-                        // Further implementation would involve adding this playlist to the client's playlists state
                         break;
                     }
                     case 'requestSongFile': {
@@ -1205,6 +1208,17 @@ const App: React.FC = () => {
                             loop: newLoop,
                         } = message.payload;
 
+                        if (!queueIds) { // If payload is empty or doesn't have queueIds, it's a request for state
+                            if (isHost) {
+                                const currentState = playerStateRef.current;
+                                sendPlayerState({
+                                    ...currentState,
+                                    currentTime: audioRef.current?.currentTime || 0,
+                                });
+                            }
+                            break;
+                        }
+
                         const newQueue = queueIds
                             .map((id: string) => libraryRef.current.find(s => s.id === id))
                             .filter((s): s is Song => !!s);
@@ -1236,7 +1250,6 @@ const App: React.FC = () => {
             } catch (e) {
                 console.error('Error parsing message from server:', e);
             } finally {
-                // Reset flag after processing
                 isApplyingNetworkState.current = false;
             }
         };
@@ -1251,7 +1264,7 @@ const App: React.FC = () => {
             alert('Failed to connect to the network service. The service may be starting up. Please try again in a moment.');
             setNetworkStatus('error');
         };
-    }, [library, roomCode, getPeerConnection, resetNetworkState, shareFullLibrary]);
+    }, [library, roomCode, getPeerConnection, resetNetworkState, shareFullLibrary, clientId, isHost, sendPlayerState, playerStateRef]);
 
     const handleHost = useCallback(() => {
         initWebSocket(() => {
