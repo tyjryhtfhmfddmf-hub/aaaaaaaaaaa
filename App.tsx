@@ -189,6 +189,26 @@ const App: React.FC = () => {
     const completedDownloads = useRef(new Set<string>());
     const playerStateRef = useRef({ queue, currentSongIndex, isPlaying, shuffle, loop });
 
+    const abortDownload = useCallback((songKey: string, reason: string) => {
+        console.error(`Aborting download for ${songKey}: ${reason}`);
+        // Alert user. Take first part of songKey as a title guess.
+        alert(`Download for "${songKey.split('-')[0]}" failed: ${reason}. Please try again.`);
+
+        // Cleanup all state associated with the download
+        completedDownloads.current.delete(songKey);
+        delete activeDownloads.current[songKey];
+        delete chunkData.current[songKey];
+        if (downloadTimers.current[songKey]) {
+            clearTimeout(downloadTimers.current[songKey]);
+            delete downloadTimers.current[songKey];
+        }
+        setDownloadProgress(prev => {
+            const newState = { ...prev };
+            delete newState[songKey];
+            return newState;
+        });
+    }, []);
+
     useEffect(() => {
         libraryRef.current = library;
     }, [library]);
@@ -206,6 +226,14 @@ const App: React.FC = () => {
             if (completedDownloads.current.has(songKey)) {
                 return; // Ignore chunks for an already completed download
             }
+
+            // --- Validation for conflicting totalChunks ---
+            const existingDownload = downloadProgress[songKey];
+            if (existingDownload && existingDownload.total !== totalChunks) {
+                abortDownload(songKey, `Conflicting file size detected (expected ${existingDownload.total} chunks, got ${totalChunks}).`);
+                return;
+            }
+            // --- End Validation ---
 
             if (!chunkData.current[songKey]) {
                 chunkData.current[songKey] = [];
@@ -247,7 +275,7 @@ const App: React.FC = () => {
                  });
              }
         }
-    }, [outgoingFileChunks]);
+    }, [outgoingFileChunks, downloadProgress, abortDownload]);
 
     const getPeerConnection = useCallback((peerId: number, senderId: number) => {
         if (peerConnections.current[peerId]) {
