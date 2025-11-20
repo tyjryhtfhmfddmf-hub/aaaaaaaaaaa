@@ -185,6 +185,7 @@ const App: React.FC = () => {
     const footerRef = useRef<HTMLElement>(null);
     const libraryRef = useRef<Song[]>(library);
     const chunkData = useRef<Record<string, any[]>>({});
+    const activeDownloads = useRef<Record<string, boolean>>({});
     const playerStateRef = useRef({ queue, currentSongIndex, isPlaying, shuffle, loop });
 
     useEffect(() => {
@@ -276,10 +277,21 @@ const App: React.FC = () => {
 
         pc.ondatachannel = (event) => {
             const channel = event.channel;
-            console.log(`Received data channel from ${peerId}`);
+            const songKey = channel.label;
+
+            if (activeDownloads.current[songKey]) {
+                console.warn(`Already downloading ${songKey}. Rejecting new data channel from peer ${peerId}.`);
+                channel.close();
+                return;
+            }
+            activeDownloads.current[songKey] = true;
+
+            console.log(`Received data channel from ${peerId} for song: ${songKey}`);
             dataChannels.current[peerId] = channel;
             channel.onmessage = handleDataChannelMessage;
-            channel.onclose = () => console.log(`Data channel from peer ${peerId} closed.`);
+            channel.onclose = () => {
+                console.log(`Data channel from peer ${peerId} for ${songKey} closed.`);
+            };
             channel.onerror = (error) => console.error(`Data channel error from peer ${peerId}:`, error);
         };
         
@@ -340,6 +352,7 @@ const App: React.FC = () => {
         }
 
         // Clean up the completed download from the state and refs
+        delete activeDownloads.current[songKey];
         delete chunkData.current[songKey];
         setDownloadProgress(prev => {
             const newState = { ...prev };
@@ -984,6 +997,9 @@ const App: React.FC = () => {
         Object.values(peerConnections.current).forEach(pc => pc.close());
         peerConnections.current = {};
         dataChannels.current = {};
+        activeDownloads.current = {};
+        chunkData.current = {};
+        setDownloadProgress({});
     }, []);
 
     const isApplyingNetworkState = useRef(false);
@@ -1135,6 +1151,7 @@ const App: React.FC = () => {
                     case 'songFileNotFound': {
                         const { songKey } = message.payload;
                         alert(`Could not start download for song. File not found by remote user for song: ${songKey}`);
+                        delete activeDownloads.current[songKey];
                         setDownloadProgress(prev => {
                             const newState = { ...prev };
                             delete newState[songKey];
