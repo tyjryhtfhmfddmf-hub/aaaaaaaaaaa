@@ -1120,11 +1120,12 @@ const App: React.FC = () => {
                                             chunks.push(arrayBuffer.slice(i * chunkSize, (i + 1) * chunkSize));
                                         }
                                         setOutgoingFileChunks(prev => ({ ...prev, [songKey]: chunks }));
+
                                         let i = 0;
-                                        console.log('Starting to send chunks...');
-                                        function sendChunk() {
-                                            if (i >= chunks.length) return;
-                                            if (dc.readyState === 'open') {
+                                        const highWaterMark = 16 * 1024 * 1024; // 16MB
+
+                                        const sendChunks = () => {
+                                            while (i < chunks.length && dc.bufferedAmount < highWaterMark) {
                                                 console.log(`Sending chunk ${i} for ${songKey}`);
                                                 dc.send(JSON.stringify({
                                                     type: 'songFileChunk',
@@ -1136,12 +1137,14 @@ const App: React.FC = () => {
                                                     }
                                                 }));
                                                 i++;
-                                                setTimeout(sendChunk, 10);
-                                            } else {
-                                                console.warn(`Data channel not open, stopping send for ${songKey}`);
                                             }
-                                        }
-                                        sendChunk();
+                                        };
+
+                                        dc.onbufferedamountlow = () => {
+                                            sendChunks();
+                                        };
+
+                                        sendChunks();
                                     };
                                     reader.readAsArrayBuffer(songToSend.file!);
                                 };
