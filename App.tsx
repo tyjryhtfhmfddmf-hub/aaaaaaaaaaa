@@ -278,13 +278,16 @@ const App: React.FC = () => {
         pc.ondatachannel = (event) => {
             const channel = event.channel;
             const songKey = channel.label;
+            
+            console.log(`[Lock Check] ondatachannel for songKey: ${songKey}. Current lock status: ${!!activeDownloads.current[songKey]}`);
 
             if (activeDownloads.current[songKey]) {
-                console.warn(`Already downloading ${songKey}. Rejecting new data channel from peer ${peerId}.`);
+                console.warn(`[Lock Applied] Already downloading ${songKey}. Rejecting new data channel from peer ${peerId}.`);
                 channel.close();
                 return;
             }
             activeDownloads.current[songKey] = true;
+            console.log(`[Lock Set] Set lock for songKey: ${songKey}.`);
 
             console.log(`Received data channel from ${peerId} for song: ${songKey}`);
             dataChannels.current[peerId] = channel;
