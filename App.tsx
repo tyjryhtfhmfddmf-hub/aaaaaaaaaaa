@@ -17,6 +17,15 @@ const DB_NAME = 'MusicSyncDB';
 const DB_VERSION = 1;
 const SONG_STORE = 'songs';
 
+interface PlayerStatePayload {
+    queueIds: string[];
+    currentSongIndex: number;
+    isPlaying: boolean;
+    currentTime: number;
+    shuffle: boolean;
+    loop: boolean;
+}
+
 // --- Network Config ---
 // This is a placeholder for your backend service on Render.
 // You need to deploy a WebSocket server and replace this URL.
@@ -185,39 +194,39 @@ const App: React.FC = () => {
         const message = JSON.parse(event.data);
 
         if (message.type === 'songFileChunk') {
-            const { songKey, chunk, chunkIndex, totalChunks } = message.payload;
+            const { songId, chunk, chunkIndex, totalChunks } = message.payload;
 
-            if (!chunkData.current[songKey]) {
-                chunkData.current[songKey] = [];
+            if (!chunkData.current[songId]) {
+                chunkData.current[songId] = [];
             }
 
             // Store chunk data in ref, and update progress state
-            if (!chunkData.current[songKey][chunkIndex]) {
-                chunkData.current[songKey][chunkIndex] = chunk;
+            if (!chunkData.current[songId][chunkIndex]) {
+                chunkData.current[songId][chunkIndex] = chunk;
 
                 setDownloadProgress(prev => {
                     const newProgress = { ...prev };
-                    if (!newProgress[songKey]) {
-                        newProgress[songKey] = { received: 0, total: totalChunks };
+                    if (!newProgress[songId]) {
+                        newProgress[songId] = { received: 0, total: totalChunks };
                     }
-                    newProgress[songKey].received++;
-                    console.log(`Download progress for ${songKey}: ${newProgress[songKey].received}/${newProgress[songKey].total}`);
+                    newProgress[songId].received++;
+                    console.log(`Download progress for ${songId}: ${newProgress[songId].received}/${newProgress[songId].total}`);
                     return newProgress;
                 });
             }
         } else if (message.type === 'requestMissingFileChunks') {
-             const { songKey: missingSongKey, missingIndices } = message.payload;
-             const cachedChunks = outgoingFileChunks[missingSongKey];
+             const { songId: missingSongId, missingIndices } = message.payload;
+             const cachedChunks = outgoingFileChunks[missingSongId];
              const dc = Object.values(dataChannels.current).find(d => d.readyState === 'open');
              if (cachedChunks && dc) {
-                 console.log(`Resending ${missingIndices.length} missing chunks for ${missingSongKey} via WebRTC`);
+                 console.log(`Resending ${missingIndices.length} missing chunks for ${missingSongId} via WebRTC`);
                  missingIndices.forEach((index: number) => {
                      const chunk = cachedChunks[index];
                      if (chunk) {
                          dc.send(JSON.stringify({
                              type: 'songFileChunk',
                              payload: {
-                                 songKey: missingSongKey,
+                                 songId: missingSongId,
                                  chunk: Array.from(new Uint8Array(chunk)),
                                  chunkIndex: index,
                                  totalChunks: cachedChunks.length,
@@ -273,18 +282,18 @@ const App: React.FC = () => {
         return pc;
     }, [handleDataChannelMessage]);
 
-    const processDownloadedFile = useCallback(async (songKey: string) => {
-        const chunks = chunkData.current[songKey];
+    const processDownloadedFile = useCallback(async (songId: string) => {
+        const chunks = chunkData.current[songId];
         if (!chunks) {
-            console.error(`Could not find chunk data for completed download: ${songKey}`);
+            console.error(`Could not find chunk data for completed download: ${songId}`);
             return;
         }
 
-        const receivedSong = library.find(s => getSongKey(s) === songKey);
+        const receivedSong = library.find(s => s.id === songId);
 
         if (!receivedSong) {
-            console.error(`Downloaded song with key "${songKey}" not found in the library.`);
-            alert(`Error: Could not find song for downloaded file "${songKey}". The download cannot be completed.`);
+            console.error(`Downloaded song with id "${songId}" not found in the library.`);
+            alert(`Error: Could not find song for downloaded file "${songId}". The download cannot be completed.`);
         } else {
             try {
                 const fileBlob = new Blob(chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' });
@@ -326,31 +335,31 @@ const App: React.FC = () => {
         }
 
         // Clean up the completed download from the state and refs
-        delete chunkData.current[songKey];
+        delete chunkData.current[songId];
         setDownloadProgress(prev => {
             const newState = { ...prev };
-            delete newState[songKey];
+            delete newState[songId];
             return newState;
         });
     }, [library]);
 
     useEffect(() => {
-        for (const songKey in downloadProgress) {
-            const download = downloadProgress[songKey];
+        for (const songId in downloadProgress) {
+            const download = downloadProgress[songId];
             if (download) {
                 // Clear any existing timer for this download
-                if (downloadTimers.current[songKey]) {
-                    clearTimeout(downloadTimers.current[songKey]);
+                if (downloadTimers.current[songId]) {
+                    clearTimeout(downloadTimers.current[songId]);
                 }
 
                 if (download.received === download.total) {
                     // All chunks are here. Process the file.
-                    console.log(`Download complete for ${songKey}. Processing file...`);
-                    processDownloadedFile(songKey);
+                    console.log(`Download complete for ${songId}. Processing file...`);
+                    processDownloadedFile(songId);
                 } else {
                     // Download is incomplete, set a timer to check for missing chunks
-                    downloadTimers.current[songKey] = window.setTimeout(() => {
-                        const currentChunks = chunkData.current[songKey] || [];
+                    downloadTimers.current[songId] = window.setTimeout(() => {
+                        const currentChunks = chunkData.current[songId] || [];
                         const missingIndices: number[] = [];
                         for (let i = 0; i < download.total; i++) {
                             if (!currentChunks[i]) {
@@ -359,13 +368,13 @@ const App: React.FC = () => {
                         }
 
                         if (missingIndices.length > 0) {
-                            console.log(`Requesting ${missingIndices.length} missing chunks for ${songKey} after timeout.`);
+                            console.log(`Requesting ${missingIndices.length} missing chunks for ${songId} after timeout.`);
                             // Find an open data channel to send the request
                             const dc = Object.values(dataChannels.current).find(d => d.readyState === 'open');
                             if (dc) {
                                 dc.send(JSON.stringify({
                                     type: 'requestMissingFileChunks',
-                                    payload: { songKey, missingIndices }
+                                    payload: { songId, missingIndices }
                                 }));
                             }
                         }
@@ -390,7 +399,7 @@ const App: React.FC = () => {
             if (websocketRef.current?.readyState === WebSocket.OPEN) {
                 websocketRef.current.send(JSON.stringify({
                     type: 'requestSongFile',
-                    payload: { songKey: getSongKey(songToDownload) }
+                    payload: { songId: songToDownload.id }
                 }));
                 alert(`Requesting "${songToDownload.title}"...`);
             } else {
@@ -410,11 +419,13 @@ const App: React.FC = () => {
                 if (audioRef.current) {
                     audioRef.current.src = url;
                     audioRef.current.play().catch(e => console.error("Error playing audio:", e));
-                    setIsPlaying(true);
+                    if (networkStatus !== 'connected') {
+                         setIsPlaying(true);
+                    }
                 }
             }
         }
-    }, [queue, currentSongIndex, handleDownloadSong]);
+    }, [queue, currentSongIndex, handleDownloadSong, networkStatus]);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -661,6 +672,30 @@ const App: React.FC = () => {
         }
     };
 
+    const lastSeekSync = useRef<number | null>(null);
+
+    const sendPlayerState = useCallback((newState: {
+        queue: Song[],
+        currentSongIndex: number,
+        isPlaying: boolean,
+        currentTime: number,
+        shuffle: boolean,
+        loop: boolean,
+    }) => {
+        if (isApplyingNetworkState.current) return;
+        if (websocketRef.current?.readyState === WebSocket.OPEN) {
+            const payload: PlayerStatePayload = {
+                queueIds: newState.queue.map(s => s.id),
+                currentSongIndex: newState.currentSongIndex,
+                isPlaying: newState.isPlaying,
+                currentTime: newState.currentTime,
+                shuffle: newState.shuffle,
+                loop: newState.loop,
+            };
+            websocketRef.current.send(JSON.stringify({ type: 'fullSync', payload }));
+        }
+    }, []);
+
     const saveQueueState = useCallback(() => {
         if (!rememberQueue) return;
         localStorage.setItem('music_queue', JSON.stringify(queue.map(s => s.id)));
@@ -671,47 +706,44 @@ const App: React.FC = () => {
         setCurrentSongIndex(index);
     };
 
-    const handlePlayPause = useCallback((options?: { isNetwork?: boolean }) => {
-        if (!options?.isNetwork && websocketRef.current?.readyState === WebSocket.OPEN) {
-            const command = isPlaying ? 'pauseCommand' : 'playCommand';
-            websocketRef.current.send(JSON.stringify({ type: command }));
-        }
-
-        if (isPlaying) {
-            audioRef.current?.pause();
-            setIsPlaying(false);
-        } else {
+    const handlePlayPause = useCallback(() => {
+        const newIsPlaying = !isPlaying;
+        if (newIsPlaying) {
             if (currentSongIndex === -1 && queue.length > 0) {
-                playSong(0);
+                setCurrentSongIndex(0);
             } else {
                 audioRef.current?.play().catch(e => console.error("Error resuming audio:", e));
-                setIsPlaying(true);
             }
+        } else {
+            audioRef.current?.pause();
         }
-    }, [isPlaying, currentSongIndex, queue, playSong]);
+        setIsPlaying(newIsPlaying);
+        sendPlayerState({ queue, currentSongIndex, isPlaying: newIsPlaying, currentTime: audioRef.current?.currentTime || 0, shuffle, loop });
+    }, [isPlaying, currentSongIndex, queue, shuffle, loop, sendPlayerState]);
 
-    const handleNext = useCallback((options?: { isNetwork?: boolean }) => {
-        if (!options?.isNetwork && websocketRef.current?.readyState === WebSocket.OPEN) {
-            websocketRef.current.send(JSON.stringify({ type: 'nextCommand' }));
-        }
+    const handleNext = useCallback(() => {
         if (queue.length === 0) return;
         const nextIndex = (currentSongIndex + 1) % queue.length;
-        playSong(nextIndex);
-    }, [currentSongIndex, queue, playSong]);
+        setCurrentSongIndex(nextIndex);
+        sendPlayerState({ queue, currentSongIndex: nextIndex, isPlaying, currentTime: 0, shuffle, loop });
+    }, [currentSongIndex, queue, isPlaying, shuffle, loop, sendPlayerState]);
 
-    const handlePrev = useCallback((options?: { isNetwork?: boolean }) => {
-        if (!options?.isNetwork && websocketRef.current?.readyState === WebSocket.OPEN) {
-            websocketRef.current.send(JSON.stringify({ type: 'prevCommand' }));
-        }
+    const handlePrev = useCallback(() => {
         if (queue.length === 0) return;
         const prevIndex = (currentSongIndex - 1 + queue.length) % queue.length;
-        playSong(prevIndex);
-    }, [currentSongIndex, queue.length, playSong]);
+        setCurrentSongIndex(prevIndex);
+        sendPlayerState({ queue, currentSongIndex: prevIndex, isPlaying, currentTime: 0, shuffle, loop });
+    }, [currentSongIndex, queue, isPlaying, shuffle, loop, sendPlayerState]);
     
     const handleSeek = (time: number) => {
         if (audioRef.current) {
             audioRef.current.currentTime = time;
             setCurrentTime(time);
+            const now = Date.now();
+            if (now - (lastSeekSync.current || 0) > 250) {
+                sendPlayerState({ queue, currentSongIndex, isPlaying, currentTime: time, shuffle, loop });
+                lastSeekSync.current = now;
+            }
         }
     };
 
@@ -727,15 +759,11 @@ const App: React.FC = () => {
         if (audioRef.current) audioRef.current.muted = newMutedState;
     };
     
-    const handleToggleShuffle = useCallback((options?: { isNetwork?: boolean, value?: boolean }) => {
-        const newShuffleState = options?.value ?? !shuffle;
+    const handleToggleShuffle = useCallback(() => {
+        const newShuffleState = !shuffle;
+        let newQueue = queue;
+        let newIndex = currentSongIndex;
 
-        if (!options?.isNetwork && websocketRef.current?.readyState === WebSocket.OPEN) {
-            websocketRef.current.send(JSON.stringify({ type: 'shuffleCommand', payload: { value: newShuffleState } }));
-        }
-
-        setShuffle(newShuffleState);
-    
         if (newShuffleState) {
             originalQueueBeforeShuffle.current = [...queue];
             const currentSong = queue[currentSongIndex];
@@ -744,29 +772,32 @@ const App: React.FC = () => {
                 const j = Math.floor(Math.random() * (i + 1));
                 [restOfQueue[i], restOfQueue[j]] = [restOfQueue[j], restOfQueue[i]];
             }
-            const newQueue = currentSong ? [currentSong, ...restOfQueue] : restOfQueue;
-            setQueue(newQueue);
-            setCurrentSongIndex(0);
+            newQueue = currentSong ? [currentSong, ...restOfQueue] : restOfQueue;
+            newIndex = 0;
         } else {
             const originalQueue = originalQueueBeforeShuffle.current;
             const currentSong = queue[currentSongIndex];
-            setQueue(originalQueue);
-            const newIndex = currentSong ? originalQueue.findIndex(s => s.id === currentSong.id) : 0;
-            setCurrentSongIndex(newIndex);
+            newQueue = originalQueue;
+            newIndex = currentSong ? originalQueue.findIndex(s => s.id === currentSong.id) : 0;
         }
-    }, [shuffle, queue, currentSongIndex]);
+        
+        setShuffle(newShuffleState);
+        setQueue(newQueue);
+        setCurrentSongIndex(newIndex);
+        sendPlayerState({ queue: newQueue, currentSongIndex: newIndex, isPlaying, currentTime: audioRef.current?.currentTime || 0, shuffle: newShuffleState, loop });
+    }, [shuffle, queue, currentSongIndex, isPlaying, loop, sendPlayerState]);
 
-    const handleToggleLoop = useCallback((options?: { isNetwork?: boolean, value?: boolean }) => {
-        const newLoopState = options?.value ?? !loop;
-        if (!options?.isNetwork && websocketRef.current?.readyState === WebSocket.OPEN) {
-            websocketRef.current.send(JSON.stringify({ type: 'loopCommand', payload: { value: newLoopState } }));
-        }
+    const handleToggleLoop = useCallback(() => {
+        const newLoopState = !loop;
         setLoop(newLoopState);
-    }, [loop]);
+        sendPlayerState({ queue, currentSongIndex, isPlaying, currentTime: audioRef.current?.currentTime || 0, shuffle, loop: newLoopState });
+    }, [loop, queue, currentSongIndex, isPlaying, shuffle, sendPlayerState]);
 
     const addToQueue = (song: Song) => {
         if (!queue.some(s => s.id === song.id)) {
-            setQueue(prev => [...prev, song]);
+            const newQueue = [...queue, song];
+            setQueue(newQueue);
+            sendPlayerState({ queue: newQueue, currentSongIndex, isPlaying, currentTime: audioRef.current?.currentTime || 0, shuffle, loop });
         } else {
             console.log(`"${song.title}" is already in the queue.`);
         }
@@ -777,27 +808,34 @@ const App: React.FC = () => {
         if (!songToRemove) return;
 
         const removedIndex = queue.findIndex(s => s.id === songId);
-        const newQueue = queue.filter(s => s.id !== songId);
+        let newQueue = queue.filter(s => s.id !== songId);
+        let newIndex = currentSongIndex;
+        let newIsPlaying = isPlaying;
 
         if (removedIndex === currentSongIndex) {
             if (isPlaying) {
                 audioRef.current?.pause();
-                setIsPlaying(false);
+                newIsPlaying = false;
             }
              if (newQueue.length > 0) {
-                const nextIndex = removedIndex % newQueue.length;
-                playSong(nextIndex);
+                newIndex = removedIndex % newQueue.length;
              } else {
-                setCurrentSongIndex(-1);
+                newIndex = -1;
                 if (activeUrl) URL.revokeObjectURL(activeUrl);
                 setActiveUrl(null);
                 if(audioRef.current) audioRef.current.src = '';
              }
         } else if (removedIndex < currentSongIndex) {
-            setCurrentSongIndex(prev => prev - 1);
+            newIndex = currentSongIndex - 1;
         }
 
         setQueue(newQueue);
+        setCurrentSongIndex(newIndex);
+        setIsPlaying(newIsPlaying);
+        if (removedIndex === currentSongIndex && newQueue.length > 0) {
+             playSong(newIndex);
+        }
+        sendPlayerState({ queue: newQueue, currentSongIndex: newIndex, isPlaying: newIsPlaying, currentTime: audioRef.current?.currentTime || 0, shuffle, loop });
     };
 
     const addSongByIdToQueue = (songId: string) => {
@@ -819,6 +857,7 @@ const App: React.FC = () => {
         
         setCurrentSongIndex(newIndex);
         setQueue(result);
+        sendPlayerState({ queue: result, currentSongIndex: newIndex, isPlaying, currentTime: audioRef.current?.currentTime || 0, shuffle, loop });
     };
 
     const savePlaylist = (name: string) => {
@@ -841,13 +880,21 @@ const App: React.FC = () => {
         const songsFromIds = playlist.songIds
             .map(id => library.find(s => s.id === id))
             .filter((s): s is Song => !!s);
+        
+        let newIndex = -1;
+        let newIsPlaying = false;
+        if (songsFromIds.length > 0) {
+            newIndex = 0;
+            newIsPlaying = true;
+        }
+        
         setQueue(songsFromIds);
+        setCurrentSongIndex(newIndex);
+        setIsPlaying(newIsPlaying);
         if (songsFromIds.length > 0) {
             playSong(0);
-        } else {
-            setCurrentSongIndex(-1);
-            setIsPlaying(false);
         }
+        sendPlayerState({ queue: songsFromIds, currentSongIndex: newIndex, isPlaying: newIsPlaying, currentTime: 0, shuffle, loop });
     };
 
     const deletePlaylist = (playlistId: string) => {
@@ -879,7 +926,8 @@ const App: React.FC = () => {
         }
         setCurrentTime(0);
         setDuration(0);
-    }, [activeUrl]);
+        sendPlayerState({ queue: [], currentSongIndex: -1, isPlaying: false, currentTime: 0, shuffle, loop });
+    }, [activeUrl, shuffle, loop, sendPlayerState]);
 
 
     useEffect(() => {
@@ -911,6 +959,30 @@ const App: React.FC = () => {
         }
     }, [networkStatus, shareFullLibrary]);
 
+    const resetNetworkState = useCallback(() => {
+        setNetworkStatus('offline');
+        setIsHost(false);
+        setRoomCode('');
+        setRemoteLibrary([]);
+        if (websocketRef.current) {
+            // Remove handlers to prevent them from being called during manual cleanup
+            websocketRef.current.onopen = null;
+            websocketRef.current.onmessage = null;
+            websocketRef.current.onerror = null;
+            websocketRef.current.onclose = null;
+            if (websocketRef.current.readyState === WebSocket.OPEN || websocketRef.current.readyState === WebSocket.CONNECTING) {
+                websocketRef.current.close();
+            }
+            websocketRef.current = null;
+        }
+
+        Object.values(peerConnections.current).forEach(pc => pc.close());
+        peerConnections.current = {};
+        dataChannels.current = {};
+    }, []);
+
+    const isApplyingNetworkState = useRef(false);
+
     const initWebSocket = useCallback((onOpenCallback: () => void) => {
         if (websocketRef.current && websocketRef.current.readyState < 2) {
             console.warn("WebSocket connection attempt ignored, one already exists.");
@@ -932,6 +1004,9 @@ const App: React.FC = () => {
                 const message = JSON.parse(event.data);
                 console.log('Received message:', message);
 
+                // Set flag to prevent echoing state back
+                isApplyingNetworkState.current = true;
+
                 switch (message.type) {
                     case 'connected': {
                         setClientId(message.payload.id);
@@ -945,15 +1020,6 @@ const App: React.FC = () => {
                     case 'joined': {
                         setIsHost(false);
                         setRoomCode(message.payload.roomCode);
-                        break;
-                    }
-                    case 'queueUpdate': {
-                        const receivedQueueIds = message.payload.queue as string[];
-                        const newQueue = receivedQueueIds
-                            .map(id => library.find(song => song.id === id))
-                            .filter((s): s is Song => !!s);
-                        setQueue(newQueue);
-                        alert(`Queue has been updated by a user in room ${roomCode}.`);
                         break;
                     }
                     case 'libraryUpdate': {
@@ -991,11 +1057,11 @@ const App: React.FC = () => {
                     case 'requestSongFile': {
                         try {
                             console.log('Received requestSongFile, initiating WebRTC...');
-                            const { songKey, requester } = message.payload;
-                            const songToSend = library.find(song => getSongKey(song) === songKey);
+                            const { songId, requester } = message.payload;
+                            const songToSend = library.find(song => song.id === songId);
                             if (songToSend && songToSend.file) {
                                 const pc = getPeerConnection(requester, clientId!);
-                                const dc = pc.createDataChannel(songKey);
+                                const dc = pc.createDataChannel(songId);
                                 console.log('Created data channel');
                                 dataChannels.current[requester] = dc;
                                 dc.onopen = () => {
@@ -1010,17 +1076,17 @@ const App: React.FC = () => {
                                         for (let i = 0; i < totalChunks; i++) {
                                             chunks.push(arrayBuffer.slice(i * chunkSize, (i + 1) * chunkSize));
                                         }
-                                        setOutgoingFileChunks(prev => ({ ...prev, [songKey]: chunks }));
+                                        setOutgoingFileChunks(prev => ({ ...prev, [songId]: chunks }));
                                         let i = 0;
                                         console.log('Starting to send chunks...');
                                         function sendChunk() {
                                             if (i >= chunks.length) return;
                                             if (dc.readyState === 'open') {
-                                                console.log(`Sending chunk ${i} for ${songKey}`);
+                                                console.log(`Sending chunk ${i} for ${songId}`);
                                                 dc.send(JSON.stringify({
                                                     type: 'songFileChunk',
                                                     payload: {
-                                                        songKey,
+                                                        songId,
                                                         chunk: Array.from(new Uint8Array(chunks[i])),
                                                         chunkIndex: i,
                                                         totalChunks,
@@ -1029,7 +1095,7 @@ const App: React.FC = () => {
                                                 i++;
                                                 setTimeout(sendChunk, 10);
                                             } else {
-                                                console.warn(`Data channel not open, stopping send for ${songKey}`);
+                                                console.warn(`Data channel not open, stopping send for ${songId}`);
                                             }
                                         }
                                         sendChunk();
@@ -1051,11 +1117,26 @@ const App: React.FC = () => {
                                     type: 'webrtcOffer',
                                     payload: { target: requester, offer }
                                 }));
+                            } else {
+                                websocketRef.current?.send(JSON.stringify({
+                                    type: 'songFileNotFound',
+                                    payload: { songId, target: requester }
+                                }));
                             }
                         } catch (error) {
                             console.error('Error handling requestSongFile and creating offer:', error);
                             alert(`Error creating download offer: ${error}`);
                         }
+                        break;
+                    }
+                    case 'songFileNotFound': {
+                        const { songId } = message.payload;
+                        alert(`Could not start download for song. File not found by remote user for song ID: ${songId}`);
+                        setDownloadProgress(prev => {
+                            const newState = { ...prev };
+                            delete newState[songId];
+                            return newState;
+                        });
                         break;
                     }
                     case 'webrtcOffer': {
@@ -1115,55 +1196,37 @@ const App: React.FC = () => {
                         break;
                     }
                     case 'fullSync': {
-                        const { type, payload } = message.payload;
-                        switch (type) {
-                            case 'playCommand':
-                                handlePlayPause({ isNetwork: true });
-                                break;
-                            case 'pauseCommand':
-                                handlePlayPause({ isNetwork: true });
-                                break;
-                            case 'nextCommand':
-                                handleNext({ isNetwork: true });
-                                break;
-                            case 'prevCommand':
-                                handlePrev({ isNetwork: true });
-                                break;
-                            case 'loopCommand':
-                                handleToggleLoop({ isNetwork: true, value: payload.value });
-                                break;
-                            case 'shuffleCommand':
-                                handleToggleShuffle({ isNetwork: true, value: payload.value });
-                                break;
+                        const {
+                            queueIds,
+                            currentSongIndex: newIndex,
+                            isPlaying: newIsPlaying,
+                            currentTime: newCurrentTime,
+                            shuffle: newShuffle,
+                            loop: newLoop,
+                        } = message.payload;
+
+                        const newQueue = queueIds
+                            .map((id: string) => libraryRef.current.find(s => s.id === id))
+                            .filter((s): s is Song => !!s);
+                        
+                        setQueue(newQueue);
+                        setShuffle(newShuffle);
+                        setLoop(newLoop);
+                        setCurrentSongIndex(newIndex);
+                        setIsPlaying(newIsPlaying);
+
+                        if (audioRef.current) {
+                            // To prevent jarring jumps, only seek if the time difference is significant
+                            if (Math.abs(audioRef.current.currentTime - newCurrentTime) > 2) {
+                                audioRef.current.currentTime = newCurrentTime;
+                            }
                         }
-                        break;
-                    }
-                    case 'playCommand': {
-                        if (!isPlaying) {
-                            handlePlayPause({ isNetwork: true });
+                        
+                        if (newIsPlaying) {
+                            audioRef.current?.play().catch(e => console.error("Error applying network play state:", e));
+                        } else {
+                            audioRef.current?.pause();
                         }
-                        break;
-                    }
-                    case 'pauseCommand': {
-                        if (isPlaying) {
-                            handlePlayPause({ isNetwork: true });
-                        }
-                        break;
-                    }
-                    case 'nextCommand': {
-                        handleNext({ isNetwork: true });
-                        break;
-                    }
-                    case 'prevCommand': {
-                        handlePrev({ isNetwork: true });
-                        break;
-                    }
-                    case 'loopCommand': {
-                        handleToggleLoop({ isNetwork: true, value: message.payload.value });
-                        break;
-                    }
-                    case 'shuffleCommand': {
-                        handleToggleShuffle({ isNetwork: true, value: message.payload.value });
                         break;
                     }
                     default: {
@@ -1172,21 +1235,15 @@ const App: React.FC = () => {
                 }
             } catch (e) {
                 console.error('Error parsing message from server:', e);
+            } finally {
+                // Reset flag after processing
+                isApplyingNetworkState.current = false;
             }
         };
 
         ws.onclose = (event: CloseEvent) => {
             console.log(`WebSocket disconnected. Code: ${event.code}, Reason: '${event.reason || 'No reason provided'}'`);
-            if (networkStatus !== 'error') {
-                 setNetworkStatus('offline');
-            }
-            setIsHost(false);
-            setRoomCode('');
-            websocketRef.current = null;
-            // Clean up peer connections
-            Object.values(peerConnections.current).forEach(pc => pc.close());
-            peerConnections.current = {};
-            dataChannels.current = {};
+            resetNetworkState();
         };
 
         ws.onerror = (error) => {
@@ -1194,7 +1251,7 @@ const App: React.FC = () => {
             alert('Failed to connect to the network service. The service may be starting up. Please try again in a moment.');
             setNetworkStatus('error');
         };
-    }, [library, networkStatus, roomCode, isPlaying, handlePlayPause, getPeerConnection, handleNext, handlePrev, handleToggleLoop, handleToggleShuffle]);
+    }, [library, roomCode, getPeerConnection, resetNetworkState, shareFullLibrary]);
 
     const handleHost = useCallback(() => {
         initWebSocket(() => {
@@ -1212,16 +1269,16 @@ const App: React.FC = () => {
         if (websocketRef.current?.readyState === WebSocket.OPEN) {
             websocketRef.current.send(JSON.stringify({ type: 'leave' }));
         }
-        // The onclose handler will do the rest of the cleanup
-    }, []);
+        resetNetworkState();
+    }, [resetNetworkState]);
 
     const handleShareQueue = useCallback(() => {
         if (websocketRef.current?.readyState === WebSocket.OPEN) {
-            const queueKeys = queue.map(getSongKey);
-            console.log('Sharing queue with keys:', queueKeys);
+            const queueIds = queue.map(s => s.id);
+            console.log('Sharing queue with ids:', queueIds);
             websocketRef.current.send(JSON.stringify({
                 type: 'shareQueue',
-                payload: { queue: queueKeys }
+                payload: { queue: queueIds }
             }));
             alert('Queue shared with the room!');
         } else {
@@ -1255,13 +1312,30 @@ const App: React.FC = () => {
     }, [library]);
 
     const handleSyncCommon = useCallback(() => {
-        if (websocketRef.current?.readyState === WebSocket.OPEN) {
-            websocketRef.current.send(JSON.stringify({ type: 'syncCommon' }));
-            alert('Request to sync common songs has been sent.');
+        if (remoteLibrary.length > 0) {
+            const comparison = compareLibraries("local", "remote", library, remoteLibrary);
+            const commonSongs = comparison.commonSongs;
+
+            if (commonSongs.length > 0) {
+                // Assuming "play order" means adding to the current queue in the order they appear in the local library.
+                // The compareLibraries function preserves the local library's order for common songs.
+                let updatedQueue = [...queue];
+                let addedCount = 0;
+                commonSongs.forEach(song => {
+                    if (!updatedQueue.some(s => s.id === song.id)) {
+                        updatedQueue.push(song);
+                        addedCount++;
+                    }
+                });
+                setQueue(updatedQueue);
+                alert(`${addedCount} common songs have been added to your queue.`);
+            } else {
+                alert('No common songs found to sync.');
+            }
         } else {
-            alert('Not connected to a session.');
+            alert('No remote library to compare with. Is anyone else in the room?');
         }
-    }, []);
+    }, [library, remoteLibrary, queue]);
 
     const handleCompareLibrariesButtonClick = useCallback(() => {
         if (remoteLibrary.length > 0) {
@@ -1272,7 +1346,7 @@ const App: React.FC = () => {
     }, [remoteLibrary, handleCompareLibraries]);
 
     const handleDownloadAllMissing = useCallback(() => {
-        const remoteSongs = libraryRef.current.filter(s => s.isRemote && !downloadProgress[getSongKey(s)]);
+        const remoteSongs = libraryRef.current.filter(s => s.isRemote && !downloadProgress[s.id]);
         if (remoteSongs.length === 0) {
             alert('No new remote songs to download.');
             return;

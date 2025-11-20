@@ -18,23 +18,33 @@ export const compareLibraries = (
     localLibrary: Song[],
     remoteLibrary: Song[]
 ): ComparisonData => {
-    const localKeys = new Set(localLibrary.map(getSongKey));
-    const remoteKeys = new Set(remoteLibrary.map(getSongKey));
+    const localSongMap = new Map(localLibrary.map(song => [getSongKey(song), song]));
+    const remoteSongMap = new Map(remoteLibrary.map(song => [getSongKey(song), song]));
+
+    const localKeys = new Set(localSongMap.keys());
+    const remoteKeys = new Set(remoteSongMap.keys());
 
     const commonKeys = [...localKeys].filter(key => remoteKeys.has(key));
     const localOnlyKeys = [...localKeys].filter(key => !remoteKeys.has(key));
     const remoteOnlyKeys = [...remoteKeys].filter(key => !localKeys.has(key));
 
-    const getTitleFromKey = (key: string) => {
-        const song = localLibrary.find(s => getSongKey(s) === key) || remoteLibrary.find(s => getSongKey(s) === key);
-        return song ? `${song.title} by ${song.artist}` : 'Unknown Song';
+    const totalLocalSongs = localKeys.size;
+    const totalRemoteSongs = remoteKeys.size;
+    
+    const localPercentage = totalLocalSongs > 0 ? Math.round((commonKeys.length / totalLocalSongs) * 100) : 0;
+    const remotePercentage = totalRemoteSongs > 0 ? Math.round((commonKeys.length / totalRemoteSongs) * 100) : 0;
+
+    const getSongFromKey = (key: string) => {
+        return localSongMap.get(key) || remoteSongMap.get(key) as Song;
     };
 
     return {
         localUser,
         remoteUser,
-        commonSongs: commonKeys.map(getTitleFromKey),
-        localOnlySongs: localOnlyKeys.map(getTitleFromKey),
-        remoteOnlySongs: remoteOnlyKeys.map(getTitleFromKey),
+        commonSongs: commonKeys.map(getSongFromKey),
+        localOnlySongs: localOnlyKeys.map(getSongFromKey),
+        remoteOnlySongs: remoteOnlyKeys.map(getSongFromKey),
+        localPercentage,
+        remotePercentage,
     };
 };
