@@ -186,6 +186,7 @@ const App: React.FC = () => {
     const libraryRef = useRef<Song[]>(library);
     const chunkData = useRef<Record<string, any[]>>({});
     const activeDownloads = useRef<Record<string, boolean>>({});
+    const completedDownloads = useRef(new Set<string>());
     const playerStateRef = useRef({ queue, currentSongIndex, isPlaying, shuffle, loop });
 
     useEffect(() => {
@@ -201,6 +202,10 @@ const App: React.FC = () => {
 
         if (message.type === 'songFileChunk') {
             const { songKey, chunk, chunkIndex, totalChunks } = message.payload;
+
+            if (completedDownloads.current.has(songKey)) {
+                return; // Ignore chunks for an already completed download
+            }
 
             if (!chunkData.current[songKey]) {
                 chunkData.current[songKey] = [];
@@ -355,6 +360,7 @@ const App: React.FC = () => {
         }
 
         // Clean up the completed download from the state and refs
+        completedDownloads.current.delete(songKey);
         delete activeDownloads.current[songKey];
         delete chunkData.current[songKey];
         setDownloadProgress(prev => {
@@ -373,10 +379,12 @@ const App: React.FC = () => {
                     clearTimeout(downloadTimers.current[songKey]);
                 }
 
-                if (download.received === download.total) {
-                    // All chunks are here. Process the file.
-                    console.log(`Download complete for ${songKey}. Processing file...`);
-                    processDownloadedFile(songKey);
+                if (download.received >= download.total) {
+                    if (!completedDownloads.current.has(songKey)) {
+                        console.log(`Download complete for ${songKey}. Processing file...`);
+                        completedDownloads.current.add(songKey);
+                        processDownloadedFile(songKey);
+                    }
                 } else {
                     // Download is incomplete, set a timer to check for missing chunks
                     downloadTimers.current[songKey] = window.setTimeout(() => {
@@ -1022,6 +1030,7 @@ const App: React.FC = () => {
         peerConnections.current = {};
         dataChannels.current = {};
         activeDownloads.current = {};
+        completedDownloads.current.clear();
         chunkData.current = {};
         setDownloadProgress({});
     }, []);
