@@ -199,39 +199,39 @@ const App: React.FC = () => {
         const message = JSON.parse(event.data);
 
         if (message.type === 'songFileChunk') {
-            const { songId, chunk, chunkIndex, totalChunks } = message.payload;
+            const { songKey, chunk, chunkIndex, totalChunks } = message.payload;
 
-            if (!chunkData.current[songId]) {
-                chunkData.current[songId] = [];
+            if (!chunkData.current[songKey]) {
+                chunkData.current[songKey] = [];
             }
 
             // Store chunk data in ref, and update progress state
-            if (!chunkData.current[songId][chunkIndex]) {
-                chunkData.current[songId][chunkIndex] = chunk;
+            if (!chunkData.current[songKey][chunkIndex]) {
+                chunkData.current[songKey][chunkIndex] = chunk;
 
                 setDownloadProgress(prev => {
                     const newProgress = { ...prev };
-                    if (!newProgress[songId]) {
-                        newProgress[songId] = { received: 0, total: totalChunks };
+                    if (!newProgress[songKey]) {
+                        newProgress[songKey] = { received: 0, total: totalChunks };
                     }
-                    newProgress[songId].received++;
-                    console.log(`Download progress for ${songId}: ${newProgress[songId].received}/${newProgress[songId].total}`);
+                    newProgress[songKey].received++;
+                    console.log(`Download progress for ${songKey}: ${newProgress[songKey].received}/${newProgress[songKey].total}`);
                     return newProgress;
                 });
             }
         } else if (message.type === 'requestMissingFileChunks') {
-             const { songId: missingSongId, missingIndices } = message.payload;
-             const cachedChunks = outgoingFileChunks[missingSongId];
+             const { songKey: missingSongKey, missingIndices } = message.payload;
+             const cachedChunks = outgoingFileChunks[missingSongKey];
              const dc = Object.values(dataChannels.current).find(d => d.readyState === 'open');
              if (cachedChunks && dc) {
-                 console.log(`Resending ${missingIndices.length} missing chunks for ${missingSongId} via WebRTC`);
+                 console.log(`Resending ${missingIndices.length} missing chunks for ${missingSongKey} via WebRTC`);
                  missingIndices.forEach((index: number) => {
                      const chunk = cachedChunks[index];
                      if (chunk) {
                          dc.send(JSON.stringify({
                              type: 'songFileChunk',
                              payload: {
-                                 songId: missingSongId,
+                                 songKey: missingSongKey,
                                  chunk: Array.from(new Uint8Array(chunk)),
                                  chunkIndex: index,
                                  totalChunks: cachedChunks.length,
@@ -287,18 +287,18 @@ const App: React.FC = () => {
         return pc;
     }, [handleDataChannelMessage]);
 
-    const processDownloadedFile = useCallback(async (songId: string) => {
-        const chunks = chunkData.current[songId];
+    const processDownloadedFile = useCallback(async (songKey: string) => {
+        const chunks = chunkData.current[songKey];
         if (!chunks) {
-            console.error(`Could not find chunk data for completed download: ${songId}`);
+            console.error(`Could not find chunk data for completed download: ${songKey}`);
             return;
         }
 
-        const receivedSong = library.find(s => s.id === songId);
+        const receivedSong = library.find(s => getSongKey(s) === songKey);
 
         if (!receivedSong) {
-            console.error(`Downloaded song with id "${songId}" not found in the library.`);
-            alert(`Error: Could not find song for downloaded file "${songId}". The download cannot be completed.`);
+            console.error(`Downloaded song with key "${songKey}" not found in the library.`);
+            alert(`Error: Could not find song for downloaded file "${songKey}". The download cannot be completed.`);
         } else {
             try {
                 const fileBlob = new Blob(chunks.map(c => new Uint8Array(c)), { type: 'audio/mpeg' });
@@ -340,31 +340,31 @@ const App: React.FC = () => {
         }
 
         // Clean up the completed download from the state and refs
-        delete chunkData.current[songId];
+        delete chunkData.current[songKey];
         setDownloadProgress(prev => {
             const newState = { ...prev };
-            delete newState[songId];
+            delete newState[songKey];
             return newState;
         });
     }, [library]);
 
     useEffect(() => {
-        for (const songId in downloadProgress) {
-            const download = downloadProgress[songId];
+        for (const songKey in downloadProgress) {
+            const download = downloadProgress[songKey];
             if (download) {
                 // Clear any existing timer for this download
-                if (downloadTimers.current[songId]) {
-                    clearTimeout(downloadTimers.current[songId]);
+                if (downloadTimers.current[songKey]) {
+                    clearTimeout(downloadTimers.current[songKey]);
                 }
 
                 if (download.received === download.total) {
                     // All chunks are here. Process the file.
-                    console.log(`Download complete for ${songId}. Processing file...`);
-                    processDownloadedFile(songId);
+                    console.log(`Download complete for ${songKey}. Processing file...`);
+                    processDownloadedFile(songKey);
                 } else {
                     // Download is incomplete, set a timer to check for missing chunks
-                    downloadTimers.current[songId] = window.setTimeout(() => {
-                        const currentChunks = chunkData.current[songId] || [];
+                    downloadTimers.current[songKey] = window.setTimeout(() => {
+                        const currentChunks = chunkData.current[songKey] || [];
                         const missingIndices: number[] = [];
                         for (let i = 0; i < download.total; i++) {
                             if (!currentChunks[i]) {
@@ -373,13 +373,13 @@ const App: React.FC = () => {
                         }
 
                         if (missingIndices.length > 0) {
-                            console.log(`Requesting ${missingIndices.length} missing chunks for ${songId} after timeout.`);
+                            console.log(`Requesting ${missingIndices.length} missing chunks for ${songKey} after timeout.`);
                             // Find an open data channel to send the request
                             const dc = Object.values(dataChannels.current).find(d => d.readyState === 'open');
                             if (dc) {
                                 dc.send(JSON.stringify({
                                     type: 'requestMissingFileChunks',
-                                    payload: { songId, missingIndices }
+                                    payload: { songKey, missingIndices }
                                 }));
                             }
                         }
@@ -404,7 +404,7 @@ const App: React.FC = () => {
             if (websocketRef.current?.readyState === WebSocket.OPEN) {
                 websocketRef.current.send(JSON.stringify({
                     type: 'requestSongFile',
-                    payload: { songId: songToDownload.id }
+                    payload: { songKey: getSongKey(songToDownload) }
                 }));
                 alert(`Requesting "${songToDownload.title}"...`);
             } else {
@@ -1060,11 +1060,11 @@ const App: React.FC = () => {
                     case 'requestSongFile': {
                         try {
                             console.log('Received requestSongFile, initiating WebRTC...');
-                            const { songId, requester } = message.payload;
-                            const songToSend = library.find(song => song.id === songId);
+                            const { songKey, requester } = message.payload;
+                            const songToSend = library.find(song => getSongKey(song) === songKey);
                             if (songToSend && songToSend.file) {
                                 const pc = getPeerConnection(requester, clientId!);
-                                const dc = pc.createDataChannel(songId);
+                                const dc = pc.createDataChannel(songKey);
                                 console.log('Created data channel');
                                 dataChannels.current[requester] = dc;
                                 dc.onopen = () => {
@@ -1079,17 +1079,17 @@ const App: React.FC = () => {
                                         for (let i = 0; i < totalChunks; i++) {
                                             chunks.push(arrayBuffer.slice(i * chunkSize, (i + 1) * chunkSize));
                                         }
-                                        setOutgoingFileChunks(prev => ({ ...prev, [songId]: chunks }));
+                                        setOutgoingFileChunks(prev => ({ ...prev, [songKey]: chunks }));
                                         let i = 0;
                                         console.log('Starting to send chunks...');
                                         function sendChunk() {
                                             if (i >= chunks.length) return;
                                             if (dc.readyState === 'open') {
-                                                console.log(`Sending chunk ${i} for ${songId}`);
+                                                console.log(`Sending chunk ${i} for ${songKey}`);
                                                 dc.send(JSON.stringify({
                                                     type: 'songFileChunk',
                                                     payload: {
-                                                        songId,
+                                                        songKey,
                                                         chunk: Array.from(new Uint8Array(chunks[i])),
                                                         chunkIndex: i,
                                                         totalChunks,
@@ -1098,7 +1098,7 @@ const App: React.FC = () => {
                                                 i++;
                                                 setTimeout(sendChunk, 10);
                                             } else {
-                                                console.warn(`Data channel not open, stopping send for ${songId}`);
+                                                console.warn(`Data channel not open, stopping send for ${songKey}`);
                                             }
                                         }
                                         sendChunk();
@@ -1123,7 +1123,7 @@ const App: React.FC = () => {
                             } else {
                                 websocketRef.current?.send(JSON.stringify({
                                     type: 'songFileNotFound',
-                                    payload: { songId, target: requester }
+                                    payload: { songKey, target: requester }
                                 }));
                             }
                         } catch (error) {
@@ -1133,11 +1133,11 @@ const App: React.FC = () => {
                         break;
                     }
                     case 'songFileNotFound': {
-                        const { songId } = message.payload;
-                        alert(`Could not start download for song. File not found by remote user for song ID: ${songId}`);
+                        const { songKey } = message.payload;
+                        alert(`Could not start download for song. File not found by remote user for song: ${songKey}`);
                         setDownloadProgress(prev => {
                             const newState = { ...prev };
-                            delete newState[songId];
+                            delete newState[songKey];
                             return newState;
                         });
                         break;
@@ -1199,6 +1199,23 @@ const App: React.FC = () => {
                         break;
                     }
                     case 'fullSync': {
+                        const { payload } = message;
+
+                        // A fullSync with an empty payload or missing queueIds is a request for the host's state.
+                        if (!payload || typeof payload.queueIds === 'undefined') {
+                            if (isHost) {
+                                console.log('Received state request, sending full player state.');
+                                const currentState = playerStateRef.current;
+                                sendPlayerState({
+                                    ...currentState,
+                                    currentTime: audioRef.current?.currentTime || 0,
+                                });
+                            } else {
+                                console.log('Received empty fullSync as non-host, ignoring.');
+                            }
+                            break;
+                        }
+
                         const {
                             queueIds,
                             currentSongIndex: newIndex,
@@ -1206,23 +1223,12 @@ const App: React.FC = () => {
                             currentTime: newCurrentTime,
                             shuffle: newShuffle,
                             loop: newLoop,
-                        } = message.payload;
-
-                        if (!queueIds) { // If payload is empty or doesn't have queueIds, it's a request for state
-                            if (isHost) {
-                                const currentState = playerStateRef.current;
-                                sendPlayerState({
-                                    ...currentState,
-                                    currentTime: audioRef.current?.currentTime || 0,
-                                });
-                            }
-                            break;
-                        }
+                        } = payload;
 
                         const newQueue = queueIds
                             .map((id: string) => libraryRef.current.find(s => s.id === id))
                             .filter((s): s is Song => !!s);
-                        
+
                         setQueue(newQueue);
                         setShuffle(newShuffle);
                         setLoop(newLoop);
@@ -1235,7 +1241,7 @@ const App: React.FC = () => {
                                 audioRef.current.currentTime = newCurrentTime;
                             }
                         }
-                        
+
                         if (newIsPlaying) {
                             audioRef.current?.play().catch(e => console.error("Error applying network play state:", e));
                         } else {
@@ -1359,7 +1365,7 @@ const App: React.FC = () => {
     }, [remoteLibrary, handleCompareLibraries]);
 
     const handleDownloadAllMissing = useCallback(() => {
-        const remoteSongs = libraryRef.current.filter(s => s.isRemote && !downloadProgress[s.id]);
+        const remoteSongs = libraryRef.current.filter(s => s.isRemote && !downloadProgress[getSongKey(s)]);
         if (remoteSongs.length === 0) {
             alert('No new remote songs to download.');
             return;
