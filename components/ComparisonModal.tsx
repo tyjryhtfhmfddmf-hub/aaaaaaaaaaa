@@ -55,13 +55,13 @@ export const ComparisonModal: React.FC<ComparisonModalProps> = ({ isOpen, onClos
 
                 <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Common Songs */}
-                    <div className="style={{ backgroundColor: 'var(--custom-color-bg-primary-t-50)' }} rounded-lg p-4 flex flex-col">
+                    <div style={{ backgroundColor: 'var(--custom-color-bg-primary-t-50)' }} className="rounded-lg p-4 flex flex-col">
                         <h3 className="text-lg font-semibold mb-3 text-center border-b border-gray-700 pb-2">
                             Common Songs ({commonSongs.length})
                         </h3>
                         <ul className="space-y-2 overflow-y-auto flex-1 pr-2">
                             {commonSongs.map(song => (
-                                <li key={song.id} className="p-2 rounded-md style={{ backgroundColor: 'var(--custom-color-bg-secondary-t-60)' }}">
+                                <li key={song.id} style={{ backgroundColor: 'var(--custom-color-bg-secondary-t-60)' }} className="p-2 rounded-md">
                                     <p className="font-medium truncate text-sm">{song.title}</p>
                                     <p className="text-xs text-gray-400 truncate">{song.artist}</p>
                                 </li>
@@ -70,13 +70,13 @@ export const ComparisonModal: React.FC<ComparisonModalProps> = ({ isOpen, onClos
                     </div>
 
                     {/* Your Unique Songs */}
-                    <div className="style={{ backgroundColor: 'var(--custom-color-bg-primary-t-50)' }} rounded-lg p-4 flex flex-col">
+                    <div style={{ backgroundColor: 'var(--custom-color-bg-primary-t-50)' }} className="rounded-lg p-4 flex flex-col">
                         <h3 className="text-lg font-semibold mb-3 text-center border-b border-gray-700 pb-2">
                             Only You Have ({localOnlySongs.length})
                         </h3>
                         <ul className="space-y-2 overflow-y-auto flex-1 pr-2">
                             {localOnlySongs.map(song => (
-                                <li key={song.id} className="p-2 rounded-md style={{ backgroundColor: 'var(--custom-color-bg-secondary-t-60)' }}">
+                                <li key={song.id} style={{ backgroundColor: 'var(--custom-color-bg-secondary-t-60)' }} className="p-2 rounded-md">
                                     <p className="font-medium truncate text-sm">{song.title}</p>
                                     <p className="text-xs text-gray-400 truncate">{song.artist}</p>
                                 </li>
@@ -85,13 +85,13 @@ export const ComparisonModal: React.FC<ComparisonModalProps> = ({ isOpen, onClos
                     </div>
 
                     {/* Their Unique Songs */}
-                    <div className="style={{ backgroundColor: 'var(--custom-color-bg-primary-t-50)' }} rounded-lg p-4 flex flex-col">
+                    <div style={{ backgroundColor: 'var(--custom-color-bg-primary-t-50)' }} className="rounded-lg p-4 flex flex-col">
                         <h3 className="text-lg font-semibold mb-3 text-center border-b border-gray-700 pb-2">
                             Only They Have ({remoteOnlySongs.length})
                         </h3>
                         <ul className="space-y-2 overflow-y-auto flex-1 pr-2">
                             {remoteOnlySongs.map(song => (
-                                <li key={song.id} className="p-2 rounded-md style={{ backgroundColor: 'var(--custom-color-bg-secondary-t-60)' }}">
+                                <li key={song.id} style={{ backgroundColor: 'var(--custom-color-bg-secondary-t-60)' }} className="p-2 rounded-md">
                                     <p className="font-medium truncate text-sm">{song.title}</p>
                                     <p className="text-xs text-gray-400 truncate">{song.artist}</p>
                                 </li>

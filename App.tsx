@@ -427,6 +427,10 @@ const App: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        if (isApplyingNetworkState.current) {
+            return; 
+        }
+
         const songToPlay = queue[currentSongIndex];
         if (songToPlay) {
             if (songToPlay.isRemote && !songToPlay.file) {
@@ -436,14 +440,12 @@ const App: React.FC = () => {
                 setActiveUrl(url);
                 if (audioRef.current) {
                     audioRef.current.src = url;
-                    audioRef.current.play().catch(e => console.error("Error playing audio:", e));
-                    if (networkStatus !== 'connected') {
-                         setIsPlaying(true);
-                    }
+                    handleAudioPlay(audioRef.current.play(), 'song change');
+                    setIsPlaying(true);
                 }
             }
         }
-    }, [queue, currentSongIndex, handleDownloadSong, networkStatus]);
+    }, [queue, currentSongIndex, handleDownloadSong]);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -724,13 +726,28 @@ const App: React.FC = () => {
         setCurrentSongIndex(index);
     };
 
+    const handleAudioPlay = (playPromise: Promise<void> | undefined, context: string) => {
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                if (error.name === 'AbortError') {
+                    // This is expected when a play() request is interrupted by a pause() call.
+                    // It's common in media applications with UI and network controls.
+                    // We can safely ignore it.
+                    console.log(`Audio play aborted in ${context}, which is a normal event.`);
+                    return;
+                }
+                console.error(`Unhandled audio play error in ${context}:`, error);
+            });
+        }
+    };
+
     const handlePlayPause = useCallback(() => {
         const newIsPlaying = !isPlaying;
         if (newIsPlaying) {
             if (currentSongIndex === -1 && queue.length > 0) {
                 setCurrentSongIndex(0);
             } else {
-                audioRef.current?.play().catch(e => console.error("Error resuming audio:", e));
+                handleAudioPlay(audioRef.current?.play(), 'handlePlayPause');
             }
         } else {
             audioRef.current?.pause();
@@ -743,15 +760,19 @@ const App: React.FC = () => {
         if (queue.length === 0) return;
         const nextIndex = (currentSongIndex + 1) % queue.length;
         setCurrentSongIndex(nextIndex);
-        sendPlayerState({ queue, currentSongIndex: nextIndex, isPlaying, currentTime: 0, shuffle, loop });
-    }, [currentSongIndex, queue, isPlaying, shuffle, loop, sendPlayerState]);
+        // A "next" action should always result in playback.
+        setIsPlaying(true);
+        sendPlayerState({ queue, currentSongIndex: nextIndex, isPlaying: true, currentTime: 0, shuffle, loop });
+    }, [currentSongIndex, queue, shuffle, loop, sendPlayerState]);
 
     const handlePrev = useCallback(() => {
         if (queue.length === 0) return;
         const prevIndex = (currentSongIndex - 1 + queue.length) % queue.length;
         setCurrentSongIndex(prevIndex);
-        sendPlayerState({ queue, currentSongIndex: prevIndex, isPlaying, currentTime: 0, shuffle, loop });
-    }, [currentSongIndex, queue, isPlaying, shuffle, loop, sendPlayerState]);
+        // A "prev" action should also always result in playback.
+        setIsPlaying(true);
+        sendPlayerState({ queue, currentSongIndex: prevIndex, isPlaying: true, currentTime: 0, shuffle, loop });
+    }, [currentSongIndex, queue, shuffle, loop, sendPlayerState]);
     
     const handleSeek = (time: number) => {
         if (audioRef.current) {
@@ -1260,7 +1281,7 @@ const App: React.FC = () => {
                         }
 
                         if (newIsPlaying) {
-                            audioRef.current?.play().catch(e => console.error("Error applying network play state:", e));
+                            handleAudioPlay(audioRef.current?.play(), 'fullSync');
                         } else {
                             audioRef.current?.pause();
                         }
@@ -1353,25 +1374,24 @@ const App: React.FC = () => {
             const commonSongs = comparison.commonSongs;
 
             if (commonSongs.length > 0) {
-                // Assuming "play order" means adding to the current queue in the order they appear in the local library.
-                // The compareLibraries function preserves the local library's order for common songs.
-                let updatedQueue = [...queue];
-                let addedCount = 0;
-                commonSongs.forEach(song => {
-                    if (!updatedQueue.some(s => s.id === song.id)) {
-                        updatedQueue.push(song);
-                        addedCount++;
-                    }
-                });
-                setQueue(updatedQueue);
-                alert(`${addedCount} common songs have been added to your queue.`);
+                const queueSongKeys = new Set(queue.map(getSongKey));
+                const songsToAdd = commonSongs.filter(s => !queueSongKeys.has(getSongKey(s)));
+
+                if (songsToAdd.length > 0) {
+                    const newQueue = [...queue, ...songsToAdd];
+                    setQueue(newQueue);
+                    alert(`${songsToAdd.length} common songs have been added to your queue.`);
+                    sendPlayerState({ queue: newQueue, currentSongIndex, isPlaying, currentTime: audioRef.current?.currentTime || 0, shuffle, loop });
+                } else {
+                    alert('All common songs are already in your queue.');
+                }
             } else {
                 alert('No common songs found to sync.');
             }
         } else {
             alert('No remote library to compare with. Is anyone else in the room?');
         }
-    }, [library, remoteLibrary, queue]);
+    }, [library, remoteLibrary, queue, currentSongIndex, isPlaying, shuffle, loop, sendPlayerState]);
 
     const handleCompareLibrariesButtonClick = useCallback(() => {
         if (remoteLibrary.length > 0) {
