@@ -227,6 +227,12 @@ const App: React.FC = () => {
         if (message.type === 'songFileChunk') {
             const { songKey, chunk, chunkIndex, totalChunks } = message.payload;
 
+            // Defensive check against impossible chunks
+            if (chunkIndex >= totalChunks) {
+                console.error(`CRITICAL: Received impossible chunk for ${songKey}! Index: ${chunkIndex}, Total: ${totalChunks}. Discarding.`);
+                return;
+            }
+
             if (completedDownloads.current.has(songKey)) {
                 return; // Ignore chunks for an already completed download
             }
@@ -1208,7 +1214,7 @@ const App: React.FC = () => {
                                 console.log('Sending WebRTC offer...');
                                 websocketRef.current?.send(JSON.stringify({
                                     type: 'webrtcOffer',
-                                    payload: { target: requester, offer }
+                                    payload: { target: requester, offer, songKey }
                                 }));
                             } else {
                                 websocketRef.current?.send(JSON.stringify({
@@ -1235,8 +1241,18 @@ const App: React.FC = () => {
                     }
                     case 'webrtcOffer': {
                         try {
+                            const { offer, sender: offererId, songKey } = message.payload;
+
+                            // AGGRESSIVE "FIRST-RESPONDER" LOCK
+                            if (activeDownloads.current[songKey]) {
+                                console.warn(`[webrtcOffer] Ignoring offer for ${songKey} from peer ${offererId}, download already in progress from another peer.`);
+                                return; // Simply ignore the offer
+                            }
+                            activeDownloads.current[songKey] = true;
+                            console.log(`[webrtcOffer] Accepting first offer for ${songKey} from peer ${offererId}.`);
+                            // END LOCK
+
                             console.log('Received WebRTC offer...');
-                            const { offer, sender: offererId } = message.payload;
                             const pcForOffer = getPeerConnection(offererId, clientId!);
                             
                             console.log('Setting remote description...');
