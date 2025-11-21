@@ -1403,6 +1403,19 @@ const App: React.FC = () => {
         }
     }, [playlists]);
 
+    const handleClearAllDownloads = useCallback(() => {
+        // Clear all download-related state and refs
+        completedDownloads.current.clear();
+        activeDownloads.current = {};
+        chunkData.current = {};
+        if (downloadTimers.current) {
+            Object.values(downloadTimers.current).forEach(clearTimeout);
+            downloadTimers.current = {};
+        }
+        setDownloadProgress({});
+        alert('All partial downloads and download progress cleared.');
+    }, []);
+
     const handleCompareLibraries = useCallback((remoteLibrary: Song[]) => {
         const localUser = 'You';
         const remoteUser = 'Them'; // Replace with actual remote user name if available
@@ -1626,6 +1639,7 @@ const App: React.FC = () => {
                     onUiScaleChange={setUiScale}
                     onCheckForUpdates={handleCheckForUpdates}
                     updateStatus={updateStatus}
+                    onClearAllDownloads={handleClearAllDownloads}
                 />
             )}
 

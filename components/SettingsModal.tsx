@@ -39,7 +39,7 @@ interface SettingsModalProps {
     onCheckForUpdates: () => void;
 
     updateStatus: string;
-
+    onClearAllDownloads: () => void;
 }
 
 
@@ -121,6 +121,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onCheckForUpdates,
 
     updateStatus,
+
+    onClearAllDownloads,
 
 }) => {
 
@@ -246,15 +248,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                             </div>
 
-                            <div className="flex items-center justify-between">
+                                                        <div className="flex items-center justify-between">
 
-                                <label htmlFor="rememberQueueToggle" className="text-custom-text-primary">Remember 'Up Next' Queue</label>
+                                                            <label htmlFor="rememberQueueToggle" className="text-custom-text-primary">Remember 'Up Next' Queue</label>
 
-                                <ToggleSwitch enabled={rememberQueue} onToggle={onToggleRememberQueue} id="rememberQueueToggle" />
+                                                            <ToggleSwitch enabled={rememberQueue} onToggle={onToggleRememberQueue} id="rememberQueueToggle" />
 
-                            </div>
+                                                        </div>
 
-                        </div>
+                                                        <div className="flex items-center justify-between">
+
+                                                            <label htmlFor="clearDownloadsButton" className="text-custom-text-primary">Clear All Partial Downloads</label>
+
+                                                            <button
+
+                                                                id="clearDownloadsButton"
+
+                                                                onClick={onClearAllDownloads}
+
+                                                                className="bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+
+                                                            >
+
+                                                                Clear
+
+                                                            </button>
+
+                                                        </div>
+
+                                                    </div>
 
                     </div>
 
