@@ -153,6 +153,10 @@ const App: React.FC = () => {
     const [comparisonData, setComparisonData] = useState<ComparisonData | null>(null);
     const [remoteLibrary, setRemoteLibrary] = useState<Song[]>([]);
     const [downloadProgress, setDownloadProgress] = useState<Record<string, { received: number, total: number }>>({});
+    const downloadProgressRef = useRef(downloadProgress);
+    useEffect(() => {
+        downloadProgressRef.current = downloadProgress;
+    }, [downloadProgress]);
     const [isNetworkPanelCollapsed, setIsNetworkPanelCollapsed] = useState<boolean>(false);
     const [updateStatus, setUpdateStatus] = useState('');
     const [activeCustomColors, setActiveCustomColors] = useState<CustomPalette['colors']>({
@@ -227,10 +231,10 @@ const App: React.FC = () => {
                 return; // Ignore chunks for an already completed download
             }
 
-            // --- Validation for conflicting totalChunks ---
-            const existingDownload = downloadProgress[songKey];
+            // --- Validation using ref to prevent stale state ---
+            const existingDownload = downloadProgressRef.current[songKey];
             if (existingDownload && existingDownload.total !== totalChunks) {
-                abortDownload(songKey, `Conflicting file size detected (expected ${existingDownload.total} chunks, got ${totalChunks}).`);
+                abortDownload(songKey, `Conflicting file size detected.`);
                 return;
             }
             // --- End Validation ---
@@ -244,6 +248,12 @@ const App: React.FC = () => {
                 chunkData.current[songKey][chunkIndex] = chunk;
 
                 setDownloadProgress(prev => {
+                    // We still check for conflicting totals here, in case of a race condition
+                    // between this chunk and the download being initialized.
+                    if (prev[songKey] && prev[songKey].total !== totalChunks) {
+                        abortDownload(songKey, `Conflicting file size detected.`);
+                        return prev; // Return previous state without changes
+                    }
                     const newProgress = { ...prev };
                     if (!newProgress[songKey]) {
                         newProgress[songKey] = { received: 0, total: totalChunks };
@@ -275,7 +285,7 @@ const App: React.FC = () => {
                  });
              }
         }
-    }, [outgoingFileChunks, downloadProgress, abortDownload]);
+    }, [outgoingFileChunks, abortDownload]);
 
     const getPeerConnection = useCallback((peerId: number, senderId: number) => {
         if (peerConnections.current[peerId]) {
