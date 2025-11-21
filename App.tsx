@@ -413,14 +413,56 @@ const App: React.FC = () => {
                     clearTimeout(downloadTimers.current[songKey]);
                 }
 
+                // Check for completion
                 if (download.received >= download.total) {
-                    if (!completedDownloads.current.has(songKey)) {
-                        console.log(`Download complete for ${songKey}. Processing file...`);
-                        completedDownloads.current.add(songKey);
-                        processDownloadedFile(songKey);
+                    const chunks = chunkData.current[songKey];
+                    let isComplete = true;
+
+                    // Verify that all chunks are actually present
+                    if (!chunks || chunks.length < download.total) {
+                        isComplete = false;
+                    } else {
+                        for (let i = 0; i < download.total; i++) {
+                            if (!chunks[i]) {
+                                isComplete = false; // Found a hole
+                                break;
+                            }
+                        }
+                    }
+
+                    if (isComplete) {
+                        if (!completedDownloads.current.has(songKey)) {
+                            console.log(`Download verified as complete for ${songKey}. Processing file...`);
+                            completedDownloads.current.add(songKey);
+                            processDownloadedFile(songKey);
+                        }
+                    } else {
+                        // The count is misleading. There are holes. Let the timeout handle it.
+                        console.warn(`Chunk count reached for ${songKey}, but data is incomplete. Waiting for missing chunks.`);
+                        // Set a timeout to request missing chunks if it's not already running
+                        downloadTimers.current[songKey] = window.setTimeout(() => {
+                            const currentChunks = chunkData.current[songKey] || [];
+                            const missingIndices: number[] = [];
+                            for (let i = 0; i < download.total; i++) {
+                                if (!currentChunks[i]) {
+                                    missingIndices.push(i);
+                                }
+                            }
+    
+                            if (missingIndices.length > 0) {
+                                console.log(`Requesting ${missingIndices.length} missing chunks for ${songKey} after verification failure.`);
+                                const dc = Object.values(dataChannels.current).find(d => d.readyState === 'open');
+                                if (dc) {
+                                    dc.send(JSON.stringify({
+                                        type: 'requestMissingFileChunks',
+                                        payload: { songKey, missingIndices }
+                                    }));
+                                }
+                            }
+                        }, 2000); // Shorter timeout for re-verification
                     }
                 } else {
-                    // Download is incomplete, set a timer to check for missing chunks
+                    // Download is still in progress, set a timeout to check for missing chunks later
                     downloadTimers.current[songKey] = window.setTimeout(() => {
                         const currentChunks = chunkData.current[songKey] || [];
                         const missingIndices: number[] = [];
@@ -432,7 +474,6 @@ const App: React.FC = () => {
 
                         if (missingIndices.length > 0) {
                             console.log(`Requesting ${missingIndices.length} missing chunks for ${songKey} after timeout.`);
-                            // Find an open data channel to send the request
                             const dc = Object.values(dataChannels.current).find(d => d.readyState === 'open');
                             if (dc) {
                                 dc.send(JSON.stringify({
