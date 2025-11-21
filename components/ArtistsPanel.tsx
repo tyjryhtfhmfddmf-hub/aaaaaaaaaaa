@@ -44,7 +44,7 @@ export const ArtistsPanel: React.FC<ArtistsPanelProps> = ({ library, addToQueue 
                                 className="group flex items-center p-2 rounded-md hover:bg-gray-700 cursor-pointer transition-colors"
                             >
                                 <div className="flex-1">
-                                    <p className="font-medium text-gray-200">{song.title}</p>
+                                    <p className="font-medium text-custom-text-primary">{song.title}</p>
                                     <p className="text-sm text-gray-400">{song.album}</p>
                                 </div>
                                 <span className="text-sm text-gray-500">
@@ -68,10 +68,10 @@ export const ArtistsPanel: React.FC<ArtistsPanelProps> = ({ library, addToQueue 
                             <li
                                 key={artist}
                                 onClick={() => setSelectedArtist(artist)}
-                                className="group flex items-center p-3 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition-colors cursor-pointer"
+                                className="group flex items-center p-3 rounded-lg style={{ backgroundColor: 'var(--custom-color-bg-secondary-t-50)' }} hover:bg-gray-700/50 transition-colors cursor-pointer"
                             >
                                 <div className="flex-1">
-                                    <p className="font-semibold text-gray-200">{artist}</p>
+                                    <p className="font-semibold text-custom-text-primary">{artist}</p>
                                     <p className="text-sm text-gray-400">{songs.length} song{songs.length !== 1 ? 's' : ''}</p>
                                 </div>
                             </li>

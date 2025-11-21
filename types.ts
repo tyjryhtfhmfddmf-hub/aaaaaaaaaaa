@@ -22,6 +22,11 @@ export interface CustomPalette {
     primary: string;
     accent: string;
     text: string;
+    backgroundPrimary: string;
+    backgroundSecondary: string;
+    backgroundTertiary: string;
+    backgroundPlayer: string;
+    textPrimary: string;
   };
 }
 

@@ -1,11 +1,14 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 
 const isDev = !app.isPackaged;
 
+let win;
+
 function createWindow() {
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
@@ -60,6 +63,40 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+
+  if (!isDev) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
+
+  ipcMain.on('check-for-updates', () => {
+    autoUpdater.checkForUpdates();
+  });
+
+  autoUpdater.on('update-available', () => {
+    win.webContents.send('update-status', 'Update available. Downloading...');
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    win.webContents.send('update-status', 'No updates available.');
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    win.webContents.send('update-status', 'Update downloaded. Restart to install.');
+    dialog.showMessageBox({
+        type: 'info',
+        title: 'Update ready',
+        message: 'A new version is available. Restart the application to install the update.',
+        buttons: ['Restart', 'Later']
+    }).then(buttonIndex => {
+        if (buttonIndex.response === 0) {
+            autoUpdater.quitAndInstall();
+        }
+    });
+  });
+
+  autoUpdater.on('error', (err) => {
+    win.webContents.send('update-status', `Error in auto-updater: ${err.toString()}`);
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

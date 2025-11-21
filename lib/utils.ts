@@ -1,26 +1,50 @@
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+import type { Song, ComparisonData } from '../types';
+ 
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
 
-import type { Song } from '../types';
+export const getSongKey = (song: Song): string => {
+  const title = song.title || 'Unknown Title';
+  const artist = song.artist || 'Unknown Artist';
+  return `${title.trim()}-${artist.trim()}`.toLowerCase();
+};
 
-export const getSongKey = (song: Song) => `${song.title?.toLowerCase()}-${song.artist?.toLowerCase()}`;
+export const compareLibraries = (
+    localUser: string,
+    remoteUser: string,
+    localLibrary: Song[],
+    remoteLibrary: Song[]
+): ComparisonData => {
+    const localSongMap = new Map(localLibrary.map(song => [getSongKey(song), song]));
+    const remoteSongMap = new Map(remoteLibrary.map(song => [getSongKey(song), song]));
 
-export const compareLibraries = (localUser: string, remoteUser: string, localLibrary: Song[], remoteLibrary: Song[]) => {
-    const localSongKeys = new Set(localLibrary.map(getSongKey));
-    const remoteSongKeys = new Set(remoteLibrary.map(getSongKey));
+    const localKeys = new Set(localSongMap.keys());
+    const remoteKeys = new Set(remoteSongMap.keys());
 
-    const commonSongs = localLibrary.filter(song => remoteSongKeys.has(getSongKey(song)));
-    const localOnlySongs = localLibrary.filter(song => !remoteSongKeys.has(getSongKey(song)));
-    const remoteOnlySongs = remoteLibrary.filter(song => !localSongKeys.has(getSongKey(song)));
+    const commonKeys = [...localKeys].filter(key => remoteKeys.has(key));
+    const localOnlyKeys = [...localKeys].filter(key => !remoteKeys.has(key));
+    const remoteOnlyKeys = [...remoteKeys].filter(key => !localKeys.has(key));
 
-    const localPercentage = localLibrary.length > 0 ? (commonSongs.length / localLibrary.length) * 100 : 0;
-    const remotePercentage = remoteLibrary.length > 0 ? (commonSongs.length / remoteLibrary.length) * 100 : 0;
+    const totalLocalSongs = localKeys.size;
+    const totalRemoteSongs = remoteKeys.size;
+    
+    const localPercentage = totalLocalSongs > 0 ? Math.round((commonKeys.length / totalLocalSongs) * 100) : 0;
+    const remotePercentage = totalRemoteSongs > 0 ? Math.round((commonKeys.length / totalRemoteSongs) * 100) : 0;
+
+    const getSongFromKey = (key: string) => {
+        return localSongMap.get(key) || remoteSongMap.get(key) as Song;
+    };
 
     return {
         localUser,
         remoteUser,
-        commonSongs,
-        localOnlySongs,
-        remoteOnlySongs,
-        localPercentage: Math.round(localPercentage),
-        remotePercentage: Math.round(remotePercentage),
+        commonSongs: commonKeys.map(getSongFromKey),
+        localOnlySongs: localOnlyKeys.map(getSongFromKey),
+        remoteOnlySongs: remoteOnlyKeys.map(getSongFromKey),
+        localPercentage,
+        remotePercentage,
     };
 };

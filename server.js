@@ -1,4 +1,3 @@
-
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -11,6 +10,13 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 
 // In-memory storage for rooms. A Map of roomCode -> Set of clients.
 const rooms = new Map();
+
+const getSongKey = (song) => {
+    // Fallback for older song objects that might not have a clean title/artist
+    const title = song.title || 'Unknown Title';
+    const artist = song.artist || 'Unknown Artist';
+    return `${title.trim()}-${artist.trim()}`.toLowerCase();
+};
 
 /**
  * Generates a unique 6-character uppercase alphanumeric room code.
@@ -33,8 +39,17 @@ wss.on('connection', (ws) => {
 
     let clientRoomCode = null; // Store the room code for this client
     ws.library = []; // Add a library property to the WebSocket client
+    ws.songKeys = new Set(); // Store a set of song keys for efficient lookup
+    ws.isAlive = true;
+    ws.on('pong', () => {
+        ws.isAlive = true;
+    });
 
     const cleanupClient = () => {
+        if (ws.syncInterval) {
+            clearInterval(ws.syncInterval);
+            console.log(`Cleared sync interval for host ${ws.id}`);
+        }
         if (clientRoomCode && rooms.has(clientRoomCode)) {
             const room = rooms.get(clientRoomCode);
             room.delete(ws);
@@ -53,6 +68,9 @@ wss.on('connection', (ws) => {
             console.log('Received:', data);
 
             const type = data.type ? data.type.trim() : '';
+            const playerControlCommands = [
+                'playCommand', 'pauseCommand', 'nextCommand', 'prevCommand', 'loopCommand', 'shuffleCommand', 'fullSync'
+            ];
 
             if (type === 'host') {
                 // A client wants to host a new room.
@@ -60,6 +78,27 @@ wss.on('connection', (ws) => {
                 const newRoomCode = generateRoomCode();
                 rooms.set(newRoomCode, new Set([ws]));
                 clientRoomCode = newRoomCode;
+                ws.isHost = true;
+                ws.playerState = {}; // Initialize player state for the host
+                
+                // Start a sync interval for this host
+                ws.syncInterval = setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN && ws.isHost) {
+                        const room = rooms.get(newRoomCode);
+                        if (room && room.size > 1) {
+                            const syncMessage = JSON.stringify({
+                                type: 'fullSync',
+                                payload: ws.playerState
+                            });
+                            room.forEach(client => {
+                                if (client !== ws && client.readyState === WebSocket.OPEN) {
+                                    client.send(syncMessage);
+                                }
+                            });
+                        }
+                    }
+                }, 5000); // Sync every 5 seconds
+
                 ws.send(JSON.stringify({
                     type: 'hosted',
                     payload: { roomCode: newRoomCode }
@@ -69,14 +108,23 @@ wss.on('connection', (ws) => {
                 // A client wants to join an existing room.
                 const { roomCode } = data.payload;
                 if (rooms.has(roomCode)) {
+                    const room = rooms.get(roomCode);
+                    // Notify existing clients to share their library for the newcomer
+                    const requestMessage = JSON.stringify({ type: 'requestLibraryShare' });
+                    room.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(requestMessage);
+                        }
+                    });
+
                     cleanupClient(); // Clean up any previous room connection
-                    rooms.get(roomCode).add(ws);
+                    room.add(ws);
                     clientRoomCode = roomCode;
                     ws.send(JSON.stringify({
                         type: 'joined',
                         payload: { roomCode: roomCode }
                     }));
-                    console.log(`Client joined room: ${roomCode}`);
+                    console.log(`Client joined room: ${roomCode}, requested library share.`);
                 } else {
                     ws.send(JSON.stringify({
                         type: 'error',
@@ -102,7 +150,10 @@ wss.on('connection', (ws) => {
                 }
             } else if (type === 'shareLibrary') {
                 // A client is sharing their library metadata, store it.
-                ws.library = data.payload.library || [];
+                const receivedLibrary = data.payload.library || [];
+                ws.library = receivedLibrary;
+                ws.songKeys = new Set(receivedLibrary.map(getSongKey));
+
                 if (clientRoomCode && rooms.has(clientRoomCode)) {
                     const room = rooms.get(clientRoomCode);
                     const messageToSend = JSON.stringify({
@@ -131,6 +182,25 @@ wss.on('connection', (ws) => {
                         }
                     });
                     console.log(`Playlist shared in room: ${clientRoomCode}`);
+                }
+            } else if (playerControlCommands.includes(type)) {
+                // Handle all player control commands by broadcasting them.
+                if (clientRoomCode && rooms.has(clientRoomCode)) {
+                    const room = rooms.get(clientRoomCode);
+
+                    // If the sender is the host, update their stored player state
+                    if (ws.isHost) {
+                        ws.playerState.type = type;
+                        ws.playerState.payload = data.payload;
+                    }
+
+                    const messageToSend = JSON.stringify(data); // Forward the original message
+                    room.forEach(client => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            client.send(messageToSend);
+                        }
+                    });
+                    console.log(`Player command '${type}' broadcasted in room: ${clientRoomCode}`);
                 }
             } else if (type === 'compareLibraries') {
                 if (clientRoomCode && rooms.has(clientRoomCode)) {
@@ -227,31 +297,46 @@ wss.on('connection', (ws) => {
 
                     console.log(`Synced common songs and updated queue for room: ${clientRoomCode}`);
                 }
-            } else if (type === 'requestSongFile') {
+            } else if (type === 'requestSongFile' || type === 'requestMissingFileChunks') {
                 if (clientRoomCode && rooms.has(clientRoomCode)) {
                     const room = rooms.get(clientRoomCode);
-                    const otherClient = [...room].find(client => client !== ws);
-                    if (otherClient) {
+                    const { songKey } = data.payload;
+
+                    // Find a client in the room who has the song
+                    const songOwner = [...room].find(client => client.songKeys.has(songKey) && client !== ws);
+
+                    if (songOwner) {
+                        // Forward the request to the owner
                         const messageToSend = JSON.stringify({
-                            type: 'requestSongFile',
+                            type: data.type, // Forward the original type
                             payload: {
-                                songKey: data.payload.songKey,
-                                requester: ws.id // Assuming ws has a unique id, let's add one.
+                                ...data.payload,
+                                requester: ws.id
                             }
                         });
-                        otherClient.send(messageToSend);
+                        songOwner.send(messageToSend);
+                        console.log(`Forwarded ${data.type} for "${songKey}" from client ${ws.id} to ${songOwner.id}`);
+                    } else {
+                        // Nobody in the room has the song
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            payload: { message: `Song "${songKey}" not found in this room.` }
+                        }));
+                        console.log(`Song request failed: "${songKey}" not found in room ${clientRoomCode}`);
                     }
                 }
-            } else if (type === 'songFileChunk') {
+            } else if (['webrtcOffer', 'webrtcAnswer', 'iceCandidate'].includes(type)) {
                 if (clientRoomCode && rooms.has(clientRoomCode)) {
                     const room = rooms.get(clientRoomCode);
-                    // Find the original requester
-                    const requester = [...room].find(client => client.id === data.payload.requester);
-                    if (requester) {
-                        // Send the chunk to the requester
-                        requester.send(JSON.stringify({
-                            type: 'songFileChunk',
-                            payload: data.payload
+                    const targetClient = [...room].find(client => client.id === data.payload.target);
+                    if (targetClient) {
+                        console.log(`Relaying ${type} from ${ws.id} to ${targetClient.id}`);
+                        targetClient.send(JSON.stringify({
+                            type,
+                            payload: {
+                                ...data.payload,
+                                sender: ws.id // Add sender ID for context
+                            }
                         }));
                     }
                 }
@@ -289,4 +374,17 @@ app.get('/', (req, res) => {
 
 server.listen(port, () => {
     console.log(`Server started on port ${port}`);
+});
+
+const interval = setInterval(function ping() {
+    wss.clients.forEach(function each(ws) {
+        if (ws.isAlive === false) return ws.terminate();
+
+        ws.isAlive = false;
+        ws.ping(() => {});
+    });
+}, 30000);
+
+wss.on('close', function close() {
+    clearInterval(interval);
 });

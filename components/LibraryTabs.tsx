@@ -17,6 +17,8 @@ interface LibraryTabsProps {
     onOpenSettings: () => void;
     onUpdateSong: (songId: string, newMetadata: { title: string; artist: string; album: string }) => void;
     onRemoveSong: (songId: string) => void;
+    onDownloadSong: (songId: string) => void;
+    downloadProgress: Record<string, { received: number; total: number }>;
 }
 
 enum Tab {
@@ -32,7 +34,7 @@ export const LibraryTabs: React.FC<LibraryTabsProps> = (props) => {
     const getTabClass = (tab: Tab) => {
         return activeTab === tab
             ? 'border-indigo-400 text-indigo-300'
-            : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500';
+            : 'border-transparent text-gray-400 hover:text-custom-text-primary hover:border-gray-500';
     };
 
     const libraryPanelProps = {
@@ -41,6 +43,8 @@ export const LibraryTabs: React.FC<LibraryTabsProps> = (props) => {
         addToQueue: props.addToQueue,
         onUpdateSong: onUpdateSong,
         onRemoveSong: onRemoveSong,
+        onDownloadSong: props.onDownloadSong,
+        downloadProgress: props.downloadProgress,
     };
     
     const playlistsPanelProps = {
